@@ -12,6 +12,15 @@ import ipaddress
 
 # ------------------ Functions ------------------
 
+def clear_tables():
+    for item in http_table.get_children():
+        http_table.delete(item)
+    for item in ssl_table.get_children():
+        ssl_table.delete(item)
+    for item in cookies_table.get_children():
+        cookies_table.delete(item)
+
+
 def check_http_config(url : str) -> dict:
     """
     Analyse complète des headers et protocoles de sécurité :
@@ -26,7 +35,9 @@ def check_http_config(url : str) -> dict:
         dict: résultats détaillés avec score et commentaires
     """
 
+    clear_tables()
     result = {
+        "status_code": 0,
         "original_url": url,
         "final_url": None,
         "uses_https": False,
@@ -46,6 +57,8 @@ def check_http_config(url : str) -> dict:
         response = requests.get(url, headers=headers, timeout=5, allow_redirects=True)
         final_url = response.url
         result["final_url"] = final_url
+
+        result["status_code"] = response.status_code
 
         # Check response delay
         response_time = response.elapsed.total_seconds()  # stocke le temps
@@ -101,6 +114,25 @@ def check_http_config(url : str) -> dict:
 
         # Score final borné entre 0 et 100
         result["score"] = max(0, min(result["score"], 100))
+        
+
+        #affichage dans le tableau http
+        http_table.insert("", "end", values=("Code de status", result["status_code"],""))
+        http_table.insert("", "end", values=("HTTPS activé", "Oui" if result["uses_https"] else "Non", "Le site utilise le protocole HTTPS" if result["uses_https"] else "Le site n'utilise pas le protocole HTTPS"))
+        if result["uses_https"] :
+            http_table.insert("", "end", values=("Contenu non sécurisé", "Oui" if result["mixed_content"] else "Non", "Certains éléments sont chargés via HTTP" if result["mixed_content"] else ""))
+        http_table.insert("", "end", values=("URL saisie", result["original_url"], ""))
+        http_table.insert("", "end", values=("URL finale", result["final_url"], ""))
+        http_table.insert("", "end", values=("Temps de réponse", result["time"], ""))
+        if len(result["missing_headers"]) != 0 :
+            if len(result["missing_headers"]) == 1 :
+                http_table.insert("", "end", values=("Header de sécurité absent", result["missing_headers"], ""))
+            else:
+                http_table.insert("", "end", values=("Header de sécurité absent", result["missing_headers"][0], ""))
+                for header in result["missing_headers"][1:]:
+                    http_table.insert("", "end", values=("", header, ""))
+  
+
 
     except requests.RequestException as e:
         result["comment"] = f"Erreur lors de la connexion : {e}"
@@ -248,7 +280,7 @@ def start_scan():
     root.update_idletasks()
 
     results = check_http_config(url)
-    print(results)
+    #print(results)
 
     # Simulation du scan
     def run_scan():
@@ -272,7 +304,7 @@ def open_report():
 
 root = ttk.Window(themename="cosmo")  
 root.title("Scanner de sécurité Web")
-root.geometry("550x420")
+root.geometry("1400x800")
 
 # Titre
 title_label = ttk.Label(root, text="Scanner de configuration de sécurité Web", font=("Helvetica", 16, "bold"))
@@ -314,5 +346,41 @@ progress_bar.pack(pady=20)
 # Bouton Open Report (désactivé par défaut)
 open_report_button = ttk.Button(root, text="Open Report", bootstyle=WARNING, width=25, state="disabled", command=open_report)
 open_report_button.pack(pady=10)
+
+# ------------------ Résultats ------------------
+tables_frame = ttk.Frame(root)
+tables_frame.pack(padx=10, pady=10, fill="both", expand=True)
+
+def create_result_table(parent, title):
+    """Crée un tableau avec 3 colonnes et un titre."""
+    frame = ttk.LabelFrame(parent, text=title)
+    frame.pack(side="left", padx=5, pady=5, fill="both", expand=True)
+
+    # Colonnes
+    columns = ("param", "value", "comment")
+    tree = ttk.Treeview(frame, columns=columns, show="headings", height=10)
+    
+    # Noms des colonnes
+    tree.heading("param", text="Paramètre")
+    tree.heading("value", text="Valeur")
+    tree.heading("comment", text="Commentaire")
+    
+    # Largeur et alignement
+    tree.column("param", width=150, anchor="center", stretch=False)
+    tree.column("value", width=100, anchor="center", stretch=False)
+    tree.column("comment", width=200, anchor="w", stretch=True)
+
+    # Scrollbar verticale
+    scrollbar = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
+    tree.configure(yscroll=scrollbar.set)
+    scrollbar.pack(side="right", fill="y")
+    tree.pack(fill="both", expand=True)
+
+    return tree
+
+# Création des trois tableaux
+http_table = create_result_table(tables_frame, "HTTP")
+ssl_table = create_result_table(tables_frame, "SSL/TLS")
+cookies_table = create_result_table(tables_frame, "Cookies")
 
 root.mainloop()
