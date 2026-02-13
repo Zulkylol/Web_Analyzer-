@@ -187,6 +187,15 @@ def check_http_redirections(response) -> dict:
     return result
 
 
+def check_ssl_tls(url:str) -> dict:
+    result = {
+        
+    }
+
+
+    return None
+
+
 def affichage_http(result):
     spacer: str = "               "
 
@@ -203,7 +212,7 @@ def affichage_http(result):
         if result["mixed_url"]:
             count = 1
             for url, tag in result["mixed_url"]:
-                http_table.insert("", "end", values=(f"URL {count}", url, spacer + tag))
+                http_table.insert("", "end", values=(f"URL mixte #{count}", url, spacer + tag))
                 count += 1
     
     http_table.insert("", "end", values=("URL saisie", result["original_url"], ""))
@@ -231,7 +240,7 @@ def affichage_http(result):
         http_table.insert("", "end", values=("", result["redirects"]["redirect_ips"][1:], ""))
 
 
-def max_risk(current, new):
+def max_risk(current, new): #CHECK OWASP
     """Compare deux niveaux de risque et renvoie le plus élevé"""
     levels = {"Low": 0, "Medium": 1, "High": 2}
     return new if levels[new] > levels[current] else current
