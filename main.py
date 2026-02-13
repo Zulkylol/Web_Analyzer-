@@ -7,92 +7,88 @@ import requests
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 import ipaddress
-
+from http_status_codes import HTTP_STATUS_CODES
+from utils import *
+from constants import *
 
 
 # ------------------ Functions ------------------
 
-def clear_tables():
-    for item in http_table.get_children():
-        http_table.delete(item)
-    for item in ssl_table.get_children():
-        ssl_table.delete(item)
-    for item in cookies_table.get_children():
-        cookies_table.delete(item)
-
-
 def check_http_config(url : str) -> dict:
     """
-    Analyse complète des headers et protocoles de sécurité :
-    - HTTPS
-    - Headers de sécurité classiques (HSTS, CSP, X-Frame-Options, etc.)
-    - Mixed Content (si HTTPS)
-    
+    Comprehensive analysis of security headers and protocols:
+    - Check if HTTPS is enabled
+    - Get the version of HTTP
+    - Standard security headers (HSTS, CSP, X-Frame-Options, etc.)
+    - Mixed Content (if HTTPS)
+    - Call the function analyze_http_redirections
+
     Args:
-        url (str): URL à analyser
-    
+        url (str): URL to analyze
+
     Returns:
-        dict: résultats détaillés avec score et commentaires
+        result : dict = detailed results including score and comments
     """
 
-    clear_tables()
+    # Dict that store everything we need
     result = {
         "status_code": 0,
+        "status_comment" : "",
+        "http_version" : "",
+        "uses_https": False,
+        "https_comment": "",
+        "mixed_content": False,
+        "mixed_url" : [],
+        "mixed_comment": "Aucun contenu mixte détecté",
         "original_url": url,
         "final_url": None,
-        "uses_https": False,
         "time" : 0.0,
-        "score": 0,
-        "comment": "",
+        "time_comment" : "",
         "missing_headers": [],
-        "mixed_content": False
+        "headers_comment": [],
+        "score": 0,
+        "redirects": {},
     }
 
-    if not url.startswith(("http://", "https://")):
-        url = "http://" + url
-
-    headers = {"User-Agent": "Mozilla/5.0"}
+    # Use utils.py => normalize() to format url
+    url = normalize_url(url)
 
     try:
-        response = requests.get(url, headers=headers, timeout=5, allow_redirects=True)
-        final_url = response.url
-        result["final_url"] = final_url
+        # Get the response to my request
+        response = requests.get(url, headers=HEADER, timeout=5, allow_redirects=True)
 
+        # Alimentation of result 
+        result["final_url"] = response.url
+        result["http_version"] = map_http_version(response.raw.version)
         result["status_code"] = response.status_code
+        result["status_message"] = HTTP_STATUS_CODES.get(result["status_code"], "Code inconnu")
+        result["redirects"] = check_http_redirections(response)
 
         # Check response delay
         response_time = response.elapsed.total_seconds()  # stocke le temps
         result["time"] = response_time
         if response_time > 2:
-            result["comment"] += f"Temps de réponse élevé ({response_time:.2f}s). "
-
+            result["time_comment"] = f"Temps de réponse élevé ({response_time:.2f}s)"
+        else :
+            result["time_comment"] = f"Temps de réponse standard ({response_time:.2f}s)"
 
         # HTTPS check
-        if final_url.startswith("https://"):
+        if result["final_url"].startswith("https://"):
             result["uses_https"] = True
+            result["https_comment"] = "Site sécurisé (HTTPS)"
         else:
-            result["comment"] += "Site non sécurisé (HTTP). "
+            result["https_comment"] = "Site non sécurisé (HTTP)"
 
-        # Liste des headers de sécurité, HSTS inclus
-        security_headers = [
-            "Strict-Transport-Security",  # HSTS
-            "Content-Security-Policy",
-            "X-Frame-Options",
-            "X-Content-Type-Options",
-            "Referrer-Policy",
-            "Permissions-Policy"
-        ]
-
-        # Vérification des headers
-        for h in security_headers:
+        # Security headers check
+        for h in SECURITY_HEADERS:
             value = response.headers.get(h)
             if value:
                 result["score"] += 10  # chaque header présent = 10 points
             else:
                 result["missing_headers"].append(h)
-                result["comment"] += f"{h} absent. "
+                result["headers_comment"].append("absent")
 
-        # Mixed Content si HTTPS
+        # Check if HTTPS page use HTTP content
         if result["uses_https"]:
             soup = BeautifulSoup(response.text, "html.parser")
             tags_attrs = {
@@ -106,41 +102,21 @@ def check_http_config(url : str) -> dict:
                 for element in soup.find_all(tag):
                     src = element.get(attr)
                     if src and src.startswith("http://"):
-                        mixed_urls.append(src)
+                        mixed_urls.append((src,tag))
             if mixed_urls:
                 result["mixed_content"] = True
-                result["score"] -= 10  # pénalisation pour contenu mixte
-                result["comment"] += f"Contenu mixte détecté ({len(mixed_urls)} ressources HTTP). "
+                result["score"] -= 10 
+                result["mixed_comment"] = f"Contenu mixte détecté ({len(mixed_urls)} ressources HTTP)"
+                result["mixed_url"] = mixed_urls
 
-        # Score final borné entre 0 et 100
+        # Final score between 0 and 100
         result["score"] = max(0, min(result["score"], 100))
-        
-
-        #affichage dans le tableau http
-        http_table.insert("", "end", values=("Code de status", result["status_code"],""))
-        http_table.insert("", "end", values=("HTTPS activé", "Oui" if result["uses_https"] else "Non", "Le site utilise le protocole HTTPS" if result["uses_https"] else "Le site n'utilise pas le protocole HTTPS"))
-        if result["uses_https"] :
-            http_table.insert("", "end", values=("Contenu non sécurisé", "Oui" if result["mixed_content"] else "Non", "Certains éléments sont chargés via HTTP" if result["mixed_content"] else ""))
-        http_table.insert("", "end", values=("URL saisie", result["original_url"], ""))
-        http_table.insert("", "end", values=("URL finale", result["final_url"], ""))
-        http_table.insert("", "end", values=("Temps de réponse", result["time"], ""))
-        if len(result["missing_headers"]) != 0 :
-            if len(result["missing_headers"]) == 1 :
-                http_table.insert("", "end", values=("Header de sécurité absent", result["missing_headers"], ""))
-            else:
-                http_table.insert("", "end", values=("Header de sécurité absent", result["missing_headers"][0], ""))
-                for header in result["missing_headers"][1:]:
-                    http_table.insert("", "end", values=("", header, ""))
-  
-
-
     except requests.RequestException as e:
         result["comment"] = f"Erreur lors de la connexion : {e}"
-
     return result
 
 
-def analyze__http_redirections(response) -> dict:
+def check_http_redirections(response) -> dict:
     """
     Analyse la chaîne de redirections d'une requête HTTP.
 
@@ -159,55 +135,101 @@ def analyze__http_redirections(response) -> dict:
     history = response.history
     result = {
         "num_redirects": len(history),
+        "num_comment" : "",
         "redirect_domains": [],
+        "rd_comment" : "",
         "redirect_ips": [],
+        "ri_comment" : "",
         "risk": "Low",
-        "comment": ""
     }
 
-    # Pas de redirection ?
+    # Check for redirection
     if len(history) == 0:
-        result["comment"] = "Aucune redirection"
+        result["num_comment"] = "Aucune redirection"
         return result
 
-    # Analyser chaque URL de redirection
+    # Find each redirection url
     for resp in history:
         parsed = urlparse(resp.headers.get("Location", resp.url))
         domain = parsed.hostname
 
         if domain:
-            result["redirect_domains"].append(domain)
-            # Vérifier si c'est une IP brute
+            result["redirect_domains"].append(str(domain))
+            # Check if hard IP redirection
             try:
                 ipaddress.ip_address(domain)
-                result["redirect_ips"].append(domain)
+                result["redirect_ips"].append(str(domain))
             except ValueError:
                 pass
 
-    # Commentaire et risque
-    # Nombre de redirections
+    # Comment and risk
     if len(history) <= 2:
-        result["comment"] += "Redirection normale. "
+        result["num_comment"] = "Nombre de redirection(s) normal"
     elif len(history) <= 5:
-        result["comment"] += "Plusieurs redirections détectées. "
+        result["num_comment"] = "Plusieurs redirections détectées. "
         result["risk"] = "Medium"
     else:
-        result["comment"] += "Nombre excessif de redirections ! "
+        result["num_comment"] = "Nombre excessif de redirections ! "
         result["risk"] = "High"
 
-    # Redirection vers un autre domaine
+    # Check if redirects to another domain
     original_domain = urlparse(response.url).hostname
     for dom in result["redirect_domains"]:
         if dom != original_domain and dom not in result["redirect_ips"]:
-            result["comment"] += f"Redirection vers un autre domaine ({dom}). "
+            result["rd_comment"] = f"Redirection vers ({dom}). "
             result["risk"] = max_risk(result["risk"], "Medium")
 
-    # Redirection vers IP brute
+    # Check if redirects to an IP 
     if result["redirect_ips"]:
-        result["comment"] += f"Redirection vers IP brute ({', '.join(result['redirect_ips'])}). "
+        result["ri_comment"] += f"Redirection vers IP brute ({', '.join(result['redirect_ips'])}). "
         result["risk"] = max_risk(result["risk"], "Medium")
 
     return result
+
+
+def affichage_http(result):
+    spacer: str = "               "
+
+    # Display the result in HTTP table
+    http_table.insert("", "end", values=("Code de statut", result["status_code"], spacer + result["status_message"]))
+    http_table.insert("", "end", values=("Version HTTP", result["http_version"][0], spacer + result["http_version"][1]))
+    http_table.insert("", "end", values=("HTTPS activé", "Oui" if result["uses_https"] else "Non", spacer + result["https_comment"]))
+    
+    # If HTTPS is used display result for mixed content
+    if result["uses_https"]:
+        http_table.insert("", "end", values=("Contenu mixte", "Oui" if result["mixed_content"] else "Non", spacer + result["mixed_comment"]))
+        
+        # Display URL and type of mixed contents
+        if result["mixed_url"]:
+            count = 1
+            for url, tag in result["mixed_url"]:
+                http_table.insert("", "end", values=(f"URL {count}", url, spacer + tag))
+                count += 1
+    
+    http_table.insert("", "end", values=("URL saisie", result["original_url"], ""))
+    http_table.insert("", "end", values=("URL finale", result["final_url"], ""))
+    http_table.insert("", "end", values=("Temps de réponse", result["time"], spacer + result["time_comment"]))
+
+    # Display missing security headers => MUST DO TUPLE LIKE MIXED CONTENT
+    if result["missing_headers"]:
+        for i, (header, comment) in enumerate(zip(result["missing_headers"], result["headers_comment"])):
+            if i == 0:
+                http_table.insert("", "end", values=("Header de sécurité absent", header, spacer + comment))
+            else:
+                http_table.insert("", "end", values=("", header, spacer + comment))
+
+    # Display redirection results
+    http_table.insert("", "end", values=("Nombre de redirection", result["redirects"]["num_redirects"], spacer + result["redirects"]["num_comment"]))
+    
+    if result["redirects"]["num_redirects"] != 0:
+        http_table.insert("", "end", values=("Domaines de redirection", result["redirects"]["redirect_domains"][0], spacer + result["redirects"]["rd_comment"]))
+        for domaine in result["redirects"]["redirect_domains"][1:]:
+            http_table.insert("", "end", values=("", domaine, ""))
+    
+    if result["redirects"]["redirect_ips"] != []:
+        http_table.insert("", "end", values=("IPs de redirection", result["redirects"]["redirect_ips"][0], ""))
+        http_table.insert("", "end", values=("", result["redirects"]["redirect_ips"][1:], ""))
+
 
 def max_risk(current, new):
     """Compare deux niveaux de risque et renvoie le plus élevé"""
@@ -215,84 +237,54 @@ def max_risk(current, new):
     return new if levels[new] > levels[current] else current
 
 
-def check_mixed_content(url: str) -> dict:
-    """
-    Vérifie si une page HTTPS charge du contenu HTTP (mixed content)
-    
-    Args:
-        url (str): URL de la page à analyser
-
-    Returns:
-        dict: {
-            "mixed_content_detected": bool,
-            "mixed_urls": list
-        }
-    """
-    result = {
-        "mixed_content_detected": False,
-        "mixed_urls": []
-    }
-
-    try:
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-        response = requests.get(url, headers=headers, timeout=5)
-        
-        # On ne parse que si HTTPS
-        if response.url.startswith("https://"):
-            soup = BeautifulSoup(response.text, "html.parser")
-
-            # Récupérer toutes les URLs dans src, href, link, script, img
-            tags_attrs = {
-                "img": "src",
-                "script": "src",
-                "link": "href",
-                "iframe": "src",
-            }
-
-            mixed_urls = []
-            for tag, attr in tags_attrs.items():
-                for element in soup.find_all(tag):
-                    src = element.get(attr)
-                    if src and src.startswith("http://"):
-                        mixed_urls.append(src)
-
-            if mixed_urls:
-                result["mixed_content_detected"] = True
-                result["mixed_urls"] = mixed_urls
-
-    except requests.RequestException as e:
-        print(f"Erreur lors de la détection du contenu mixte : {e}")
-
-    return result
-
-
 def start_scan():
+    clear_tables(http_table,ssl_table,cookies_table)
     url = url_entry.get().strip()
     if not url:
         messagebox.showwarning("Attention", "Veuillez entrer une URL")
         return
     
-    # Disable button while scanning
+    # Disable buttons
     go_button.config(state="disabled")
     open_report_button.config(state="disabled")
-
     progress_bar["value"] = 0
     root.update_idletasks()
 
-    results = check_http_config(url)
-    #print(results)
-
-    # Simulation du scan
     def run_scan():
-        for i in range(101):
-            time.sleep(0.03) 
-            progress_bar["value"] = i
-            root.update_idletasks()
-        messagebox.showinfo("Terminé", "Scan terminé !")
-        open_report_button.config(state="normal")
-        go_button.config(state="normal")
+        result = {}
 
-    threading.Thread(target=run_scan).start()
+        def update_progress(value):
+            progress_bar["value"] = value
+            root.update_idletasks()
+
+        try:
+            # Step 1 : normalize URL
+            time.sleep(0.05) 
+            update_progress(5)
+
+            # Step 2 : HTTP request
+            update_progress(20)
+            result = check_http_config(url)
+            update_progress(70)
+
+            # Step 3 : Display results
+            affichage_http(result)
+            update_progress(90)
+
+            # Final step
+            time.sleep(0.1)  # petite pause pour montrer la barre à 100%
+            update_progress(100)
+
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Erreur pendant le scan : {e}")
+
+        finally:
+            messagebox.showinfo("Terminé", "Scan terminé !")
+            open_report_button.config(state="normal")
+            go_button.config(state="normal")
+
+    threading.Thread(target=run_scan, daemon=True).start()
+
 
 def open_settings():
     messagebox.showinfo("Settings")
@@ -304,13 +296,13 @@ def open_report():
 
 root = ttk.Window(themename="cosmo")  
 root.title("Scanner de sécurité Web")
-root.geometry("1400x800")
+root.geometry("1600x800")
 
-# Titre
+# Title
 title_label = ttk.Label(root, text="Scanner de configuration de sécurité Web", font=("Helvetica", 16, "bold"))
 title_label.pack(pady=10)
 
-# Champ URL
+# URL textbox
 url_frame = ttk.Frame(root)
 url_frame.pack(pady=5)
 ttk.Label(url_frame, text="URL du site:", font=("Helvetica", 12)).pack(side="left", padx=5)
@@ -331,7 +323,7 @@ ttk.Checkbutton(checkbox_frame, text="Vérifier SSL/TLS", variable=ssl_var).pack
 ttk.Checkbutton(checkbox_frame, text="Vérifier headers HTTP", variable=headers_var).pack(anchor="w", pady=2, padx=5)
 ttk.Checkbutton(checkbox_frame, text="Vérifier cookies", variable=cookies_var).pack(anchor="w", pady=2, padx=5)
 
-# Boutons GO et Settings
+# Buttons GO and Settings
 button_frame = ttk.Frame(root)
 button_frame.pack(pady=15)
 go_button = ttk.Button(button_frame, text="GO", bootstyle=SUCCESS, width=12, command=start_scan)
@@ -339,48 +331,24 @@ go_button.pack(side="left", padx=10)
 settings_button = ttk.Button(button_frame, text="Settings", bootstyle=INFO, width=12, command=open_settings)
 settings_button.pack(side="left", padx=10)
 
-# Barre de chargement
+# Loading bar
 progress_bar = ttk.Progressbar(root, orient="horizontal", length=400, mode="determinate", bootstyle="success-striped")
 progress_bar.pack(pady=20)
 
-# Bouton Open Report (désactivé par défaut)
+# Button Open Report 
 open_report_button = ttk.Button(root, text="Open Report", bootstyle=WARNING, width=25, state="disabled", command=open_report)
 open_report_button.pack(pady=10)
 
-# ------------------ Résultats ------------------
+# ------------------ Results ------------------
 tables_frame = ttk.Frame(root)
 tables_frame.pack(padx=10, pady=10, fill="both", expand=True)
 
-def create_result_table(parent, title):
-    """Crée un tableau avec 3 colonnes et un titre."""
-    frame = ttk.LabelFrame(parent, text=title)
-    frame.pack(side="left", padx=5, pady=5, fill="both", expand=True)
-
-    # Colonnes
-    columns = ("param", "value", "comment")
-    tree = ttk.Treeview(frame, columns=columns, show="headings", height=10)
-    
-    # Noms des colonnes
-    tree.heading("param", text="Paramètre")
-    tree.heading("value", text="Valeur")
-    tree.heading("comment", text="Commentaire")
-    
-    # Largeur et alignement
-    tree.column("param", width=150, anchor="center", stretch=False)
-    tree.column("value", width=100, anchor="center", stretch=False)
-    tree.column("comment", width=200, anchor="w", stretch=True)
-
-    # Scrollbar verticale
-    scrollbar = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
-    tree.configure(yscroll=scrollbar.set)
-    scrollbar.pack(side="right", fill="y")
-    tree.pack(fill="both", expand=True)
-
-    return tree
-
-# Création des trois tableaux
+# Tables creation
 http_table = create_result_table(tables_frame, "HTTP")
 ssl_table = create_result_table(tables_frame, "SSL/TLS")
 cookies_table = create_result_table(tables_frame, "Cookies")
 
+style = ttk.Style()
+style.configure("Treeview", rowheight=18)
+style.configure("Treeview.Heading",font=("Helvetica", 11, "bold"))
 root.mainloop()
