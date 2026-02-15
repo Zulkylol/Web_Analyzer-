@@ -10,234 +10,1033 @@ import ipaddress
 from http_status_codes import HTTP_STATUS_CODES
 from utils import *
 from constants import *
+import socket
+import ssl
+from urllib.parse import urlparse
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import hashes
+from cryptography.x509.oid import NameOID
+from datetime import datetime, timezone
+import re
+import ipaddress
+from urllib.parse import urlparse, urljoin
+import requests
+try:
+    import httpx
+except ImportError:
+    httpx = None
+
+
 
 
 # ------------------ Functions ------------------
-
-def check_http_config(url : str) -> dict:
-    """
-    Comprehensive analysis of security headers and protocols:
-    - Check if HTTPS is enabled
-    - Get the version of HTTP
-    - Standard security headers (HSTS, CSP, X-Frame-Options, etc.)
-    - Mixed Content (if HTTPS)
-    - Call the function analyze_http_redirections
-
-    Args:
-        url (str): URL to analyze
-
-    Returns:
-        result : dict = detailed results including score and comments
-    """
-
-    # Dict that store everything we need
+def check_http_config(url: str) -> dict:
     result = {
         "status_code": 0,
-        "status_comment" : "",
-        "http_version" : "",
+        "status_message": "",
+        "http_version": "",
         "uses_https": False,
         "https_comment": "",
         "mixed_content": False,
-        "mixed_url" : [],
+        "mixed_url": [],
         "mixed_comment": "Aucun contenu mixte détecté",
         "original_url": url,
         "final_url": None,
-        "time" : 0.0,
-        "time_comment" : "",
+        "time": 0.0,
+        "time_comment": "",
         "missing_headers": [],
         "headers_comment": [],
-        "score": 0,
         "redirects": {},
+        "comment": "",
     }
 
-    # Use utils.py => normalize() to format url
+    SECURITY_HEADERS = [
+        "Strict-Transport-Security",
+        "Content-Security-Policy",
+        "X-Frame-Options",
+        "X-Content-Type-Options",
+        "Referrer-Policy",
+        "Permissions-Policy",
+        "Cross-Origin-Opener-Policy",
+        "Cross-Origin-Embedder-Policy",
+        "Cross-Origin-Resource-Policy",
+    ]
+
     url = normalize_url(url)
 
     try:
-        # Get the response to my request
-        response = requests.get(url, headers=HEADER, timeout=5, allow_redirects=True)
+        response = requests.get(
+            url,
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=5,
+            allow_redirects=True,
+        )
 
-        # Alimentation of result 
         result["final_url"] = response.url
-        result["http_version"] = map_http_version(response.raw.version)
         result["status_code"] = response.status_code
-        result["status_message"] = HTTP_STATUS_CODES.get(result["status_code"], "Code inconnu")
-        result["redirects"] = check_http_redirections(response)
+        result["status_message"] = HTTP_STATUS_CODES.get(response.status_code, "Code inconnu")
 
-        # Check response delay
-        response_time = response.elapsed.total_seconds()  # stocke le temps
-        result["time"] = response_time
-        if response_time > 2:
-            result["time_comment"] = f"Temps de réponse élevé ({response_time:.2f}s)"
-        else :
-            result["time_comment"] = f"Temps de réponse standard ({response_time:.2f}s)"
+        # HTTP version (simple mais mieux que raw.version seul)
+        if httpx:
+            try:
+                with httpx.Client(http2=True, timeout=5) as c:
+                    r2 = c.get(url)
+                    result["http_version"] = r2.http_version.upper()
+            except Exception:
+                pass
 
-        # HTTPS check
-        if result["final_url"].startswith("https://"):
-            result["uses_https"] = True
-            result["https_comment"] = "Site sécurisé (HTTPS)"
-        else:
-            result["https_comment"] = "Site non sécurisé (HTTP)"
+        if not result["http_version"]:
+            v = getattr(response.raw, "version", None)
+            if v == 10:
+                result["http_version"] = "HTTP/1.0"
+            elif v == 11:
+                result["http_version"] = "HTTP/1.1"
 
-        # Security headers check
+        # HTTPS
+        result["uses_https"] = result["final_url"].startswith("https://")
+        result["https_comment"] = "Site sécurisé (HTTPS)" if result["uses_https"] else "Site non sécurisé (HTTP)"
+
+        # Temps
+        result["time"] = response.elapsed.total_seconds()
+        result["time_comment"] = f"{result['time']:.2f}s"
+
+        # Headers sécurité
         for h in SECURITY_HEADERS:
-            value = response.headers.get(h)
-            if value:
-                result["score"] += 10  # chaque header présent = 10 points
+            if response.headers.get(h):
+                result["headers_comment"].append("present")
             else:
                 result["missing_headers"].append(h)
                 result["headers_comment"].append("absent")
 
-        # Check if HTTPS page use HTTP content
+        # Mixed content (statique simple mais élargi)
         if result["uses_https"]:
+            from bs4 import BeautifulSoup
             soup = BeautifulSoup(response.text, "html.parser")
-            tags_attrs = {
-                "img": "src",
-                "script": "src",
-                "link": "href",
-                "iframe": "src",
-            }
-            mixed_urls = []
-            for tag, attr in tags_attrs.items():
-                for element in soup.find_all(tag):
-                    src = element.get(attr)
-                    if src and src.startswith("http://"):
-                        mixed_urls.append((src,tag))
-            if mixed_urls:
-                result["mixed_content"] = True
-                result["score"] -= 10 
-                result["mixed_comment"] = f"Contenu mixte détecté ({len(mixed_urls)} ressources HTTP)"
-                result["mixed_url"] = mixed_urls
 
-        # Final score between 0 and 100
-        result["score"] = max(0, min(result["score"], 100))
-    except requests.RequestException as e:
-        result["comment"] = f"Erreur lors de la connexion : {e}"
+            tags_attrs = {
+                "img": ["src", "srcset"],
+                "script": ["src"],
+                "link": ["href"],
+                "iframe": ["src"],
+                "audio": ["src"],
+                "video": ["src", "poster"],
+                "source": ["src"],
+                "form": ["action"],
+            }
+
+            mixed = []
+
+            for tag, attrs in tags_attrs.items():
+                for elem in soup.find_all(tag):
+                    for attr in attrs:
+                        val = elem.get(attr)
+                        if not val:
+                            continue
+                        if attr == "srcset":
+                            for part in val.split(","):
+                                u = part.strip().split(" ")[0]
+                                if u.startswith("http://"):
+                                    mixed.append((u, f"{tag}[srcset]"))
+                        elif isinstance(val, str) and val.startswith("http://"):
+                            mixed.append((val, f"{tag}[{attr}]"))
+
+            # style inline
+            for elem in soup.find_all(style=True):
+                css = elem.get("style")
+                for u in re.findall(r'url\(\s*["\']?(http://[^"\')\s]+)', css):
+                    mixed.append((u, "inline-style"))
+
+            if mixed:
+                result["mixed_content"] = True
+                result["mixed_comment"] = f"{len(mixed)} ressources HTTP détectées"
+                result["mixed_url"] = list(set(mixed))
+
+        # Redirections corrigées
+        result["redirects"] = check_http_redirections(response, url)
+
+    except requests.exceptions.RequestException as e:
+        result["comment"] = f"Erreur réseau : {e}"
+
     return result
 
 
-def check_http_redirections(response) -> dict:
-    """
-    Analyse la chaîne de redirections d'une requête HTTP.
-
-    Args:
-        response: objet `requests.Response` après une requête avec allow_redirects=True
-
-    Returns:
-        dict: {
-            "num_redirects": int,
-            "redirect_domains": list,
-            "redirect_ips": list,
-            "risk": str,
-            "comment": str
-        }
-    """
-    history = response.history
+def check_http_redirections(response, original_url: str) -> dict:
+    history = response.history or []
     result = {
         "num_redirects": len(history),
-        "num_comment" : "",
+        "num_comment": "",
         "redirect_domains": [],
-        "rd_comment" : "",
+        "rd_comment": "",     
         "redirect_ips": [],
-        "ri_comment" : "",
+        "ri_comment": "",      
         "risk": "Low",
     }
 
-    # Check for redirection
-    if len(history) == 0:
+    if not history:
         result["num_comment"] = "Aucune redirection"
         return result
 
-    # Find each redirection url
+    initial_domain = urlparse(original_url).hostname
+
     for resp in history:
-        parsed = urlparse(resp.headers.get("Location", resp.url))
-        domain = parsed.hostname
+        loc = resp.headers.get("Location")
+        target = urljoin(resp.url, loc) if loc else resp.url
+        domain = urlparse(target).hostname
 
         if domain:
-            result["redirect_domains"].append(str(domain))
-            # Check if hard IP redirection
+            result["redirect_domains"].append(domain)
             try:
                 ipaddress.ip_address(domain)
-                result["redirect_ips"].append(str(domain))
+                result["redirect_ips"].append(domain)
             except ValueError:
                 pass
 
-    # Comment and risk
-    if len(history) <= 2:
-        result["num_comment"] = "Nombre de redirection(s) normal"
-    elif len(history) <= 5:
-        result["num_comment"] = "Plusieurs redirections détectées. "
-        result["risk"] = "Medium"
-    else:
-        result["num_comment"] = "Nombre excessif de redirections ! "
+    # Volume redirections
+    if len(history) > 5:
         result["risk"] = "High"
+        result["num_comment"] = "Nombre excessif de redirections !"
+    elif len(history) > 2:
+        result["risk"] = "Medium"
+        result["num_comment"] = "Plusieurs redirections détectées."
+    else:
+        result["num_comment"] = "Nombre de redirection(s) normal"
 
-    # Check if redirects to another domain
-    original_domain = urlparse(response.url).hostname
-    for dom in result["redirect_domains"]:
-        if dom != original_domain and dom not in result["redirect_ips"]:
-            result["rd_comment"] = f"Redirection vers ({dom}). "
-            result["risk"] = max_risk(result["risk"], "Medium")
+    # Changement de domaine
+    if initial_domain:
+        for dom in result["redirect_domains"]:
+            if dom != initial_domain and dom not in result["redirect_ips"]:
+                result["rd_comment"] = f"Redirection vers un autre domaine ({dom})."
+                if result["risk"] == "Low":
+                    result["risk"] = "Medium"
+                break
 
-    # Check if redirects to an IP 
+    # Redirection vers IP brute
     if result["redirect_ips"]:
-        result["ri_comment"] += f"Redirection vers IP brute ({', '.join(result['redirect_ips'])}). "
-        result["risk"] = max_risk(result["risk"], "Medium")
+        result["ri_comment"] = f"Redirection vers IP brute ({', '.join(result['redirect_ips'])})."
+        if result["risk"] == "Low":
+            result["risk"] = "Medium"
 
     return result
 
 
-def check_ssl_tls(url:str) -> dict:
+def display_http(result):
+    # Helper pour insérer une ligne 4 colonnes
+    def add_row(param, value="", check="ℹ️", comment=""):
+        http_table.insert("", "end", values=(param, value, check, comment))
+
+    # Nettoyage léger (évite KeyError)
+    redirects = result.get("redirects") or {}
+    missing_headers = result.get("missing_headers") or []
+    headers_comment = result.get("headers_comment") or []
+    mixed_urls = result.get("mixed_url") or []
+
+    # Si erreur HTTP → afficher uniquement l'erreur et stop
+    if result.get("comment"):
+        add_row("Erreur HTTP", result.get("status_message", ""), "❌", result.get("comment", ""))
+        return
+
+    # --- Status / HTTP version / HTTPS
+    add_row("Code de statut", str(result.get("status_code", "")), "✅" if 200 <= result.get("status_code", 0) < 400 else "⚠️",
+            result.get("status_message", ""))
+
+    http_version = result.get("http_version") or ""
+    if http_version:
+        # si tu stockes "HTTP/2" directement
+        add_row("Version HTTP", http_version, "✅", "")
+    else:
+        add_row("Version HTTP", "Inconnue", "⚠️", "Impossible de déterminer la version HTTP")
+
+    uses_https = bool(result.get("uses_https"))
+    add_row("HTTPS activé", "Oui" if uses_https else "Non",
+            "✅" if uses_https else "❌",
+            result.get("https_comment", ""))
+
+    # --- URLs & perf
+    add_row("URL saisie", result.get("original_url", ""), "ℹ️", "")
+    add_row("URL finale", result.get("final_url", ""), "ℹ️", "")
+
+    # Temps
+    t = result.get("time", 0.0)
+    add_row("Temps de réponse", f"{t:.2f}s" if isinstance(t, (int, float)) else str(t), "ℹ️", result.get("time_comment", ""))
+
+    # --- Mixed content (si HTTPS)
+    if uses_https:
+        mixed = bool(result.get("mixed_content"))
+        add_row("Contenu mixte", "Oui" if mixed else "Non",
+                "⚠️" if mixed else "✅",
+                result.get("mixed_comment", ""))
+
+        if mixed_urls:
+            # 1ère ligne avec label, puis lignes vides
+            for i, item in enumerate(mixed_urls, start=1):
+                # item peut être (url, origin)
+                try:
+                    url_m, origin = item
+                except Exception:
+                    url_m, origin = str(item), ""
+
+                param = "URL mixte" if i == 1 else ""
+                add_row(param, url_m, "⚠️", origin)
+
+    # --- Headers sécurité (absents)
+    # Dans ton result actuel: missing_headers liste des noms, headers_comment = ["present"/"absent"] pour CHAQUE header checké
+    # => Si tu veux un affichage propre, mieux vaut reconstruire: tous les headers absents avec commentaire "absent".
+    if missing_headers:
+        for i, header in enumerate(missing_headers, start=1):
+            param = "Headers sécu manquants" if i == 1 else ""
+            add_row(param, header, "❌", "absent")
+
+    # --- Redirections
+    num_redir = redirects.get("num_redirects", 0)
+    risk = redirects.get("risk", "Low")
+
+    risk_icon = {"Low": "✅", "Medium": "⚠️", "High": "❌"}.get(risk, "ℹ️")
+    add_row("Nombre de redirections", str(num_redir), risk_icon, redirects.get("num_comment", ""))
+
+    # Domaines
+    r_domains = redirects.get("redirect_domains") or []
+    if r_domains:
+        # commentaire global (rd_comment) sur la 1ère ligne
+        add_row("Domaines de redirection", r_domains[0], "ℹ️", redirects.get("rd_comment", ""))
+        for dom in r_domains[1:]:
+            add_row("", dom, "ℹ️", "")
+
+    # IPs
+    r_ips = redirects.get("redirect_ips") or []
+    if r_ips:
+        add_row("IPs de redirection", r_ips[0], "⚠️", redirects.get("ri_comment", ""))
+        for ip in r_ips[1:]:
+            add_row("", ip, "⚠️", "")
+
+
+def check_ssl_tls_config(url: str) -> dict:
     result = {
-        
+        "target": {
+            "hostname": "",
+            "port": 443,
+            "url": "",
+        },
+        "certificate": {
+            "subject": {
+                "common_name": "",
+                "san_dns": [],
+
+            },
+            "issuer": {
+                "common_name": "",
+            },
+            "version": {
+                "id": "",
+                "ok": False,
+                "comment": "",
+            },
+            "validity": {
+                "not_before": "",
+                "not_after": "",
+                "is_valid_now": False,
+                "expires_ok": False,
+                "expires_soon_comment": "",
+
+            },
+            "serial": {
+                "hex": "",
+                "ok": True,
+                "comment": "",
+            },
+            "signature": {
+                "hash_algorithm": "",
+                "fingerprint_sha256": "",
+                "ok": True,
+                "comment": "",
+            },
+            "public_key": {
+                "pem": "",
+                "type": "",
+                "size": None,
+                "curve": "", 
+                "ok": True,
+                "comment": "",
+                "summary": "",   
+            },
+            "extensions": {
+                "key_usage": "",
+                "extended_key_usage": "",
+                "basic_constraints": "",
+                "crl_distribution_points": "",
+                "basic_constraints_ok": None,
+                "basic_constraints_comment": "",
+                "eku_ok": None,
+                "eku_comment": "",
+                "ku_ok": None,
+                "ku_comment": "",
+                "crl_ok": None,
+                "crl_comment": "",
+            }
+            ,
+        },
+        "trust": {
+            "is_trusted": False,
+            "is_self_signed": False,
+        },
+        "hostname_check": {
+            "match": False,
+            "comment": "",
+            "ok" : False,
+            "warnings": {
+                "wildcard": "",
+                "multi_domain": "",
+            },
+        },
+        "tls": {
+            "negotiated_version": "",
+            "nv_ok" : False,
+            "nv_comment" : "",
+            "supported_versions": {},
+            "weak_cipher_support": {},
+            "weak_cipher_ok": True,
+            "weak_cipher_comment": "",
+            "policy": {
+                "ok": True,
+                "comment": "",
+            },
+            "cipher": {
+                "name": "",
+                "protocol": "",
+                "bits": 0,
+                "ok": True,
+                "comment": "",
+            },
+        },
+        "errors": {
+            "message": "",
+        },
     }
 
+    url = normalize_url(url)
+    parsed_url = urlparse(url)
+    hostname = (parsed_url.hostname or "").lower().strip() or url
+    port = parsed_url.port or 443
 
+    # target
+    result["target"]["hostname"] = hostname
+    result["target"]["port"] = port
+    result["target"]["url"] = url
+
+    try:
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE  # permet d’attraper les certs expirés
+
+        with socket.create_connection((hostname, port), timeout=5) as sock:
+            with context.wrap_socket(sock, server_hostname=hostname) as ssock:
+                result["tls"]["negotiated_version"] = ssock.version()
+
+                der_cert = ssock.getpeercert(binary_form=True)
+                cert = x509.load_der_x509_certificate(der_cert, default_backend())
+
+                # =========================================================
+                # 1) IDENTITÉ (CN / SAN / hostname match)
+                # =========================================================
+
+                # Subject (CN)
+                try:
+                    result["certificate"]["subject"]["common_name"] = (
+                        cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
+                    )
+                except IndexError:
+                    result["certificate"]["subject"]["common_name"] = ""
+
+                # Issuer (CN)
+                for attr in cert.issuer:
+                    if attr.oid._name == "commonName":
+                        result["certificate"]["issuer"]["common_name"] = attr.value
+
+                # Extract SAN and check if the hostname matches
+                cn = result["certificate"]["subject"]["common_name"]
+                try:
+                    san_ext = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)
+                    san_dns = san_ext.value.get_values_for_type(x509.DNSName)
+                    result["certificate"]["subject"]["san_dns"] = [d for d in san_dns if d != cn]
+                except Exception:
+                    result["certificate"]["subject"]["san_dns"] = []
+
+                hostname_for_match = parsed_url.hostname  # (tu avais ça avant)
+                san_list = [cn] + result["certificate"]["subject"]["san_dns"]  # inclut CN pour compatibilité
+
+                match = False
+                for entry in san_list:
+                    if entry.startswith("*."):
+                        if hostname_for_match.endswith(entry[1:]):
+                            match = True
+                            break
+                    elif entry == hostname_for_match:
+                        match = True
+                        break
+
+                result["hostname_check"]["match"] = match
+                if match:
+                    result["hostname_check"]["comment"] = "Le certificat correspond au domaine"
+                else:
+                    result["hostname_check"]["comment"] = "Le certificat ne correspond PAS au domaine"
+
+                if len(result["certificate"]["subject"]["san_dns"]) > 200:
+                    result["hostname_check"]["warnings"]["multi_domain"] = "Certificat multi-domaines massif"
+                    result["hostname_check"]["ok"] = None
+                elif len(result["certificate"]["subject"]["san_dns"]) > 50:
+                    result["hostname_check"]["warnings"]["multi_domain"] = "Certificat multi-domaines important"
+                    result["hostname_check"]["ok"] = None
+                else:
+                    result["hostname_check"]["warnings"]["multi_domain"] = "Certificat avec peu de domaine"
+                    result["hostname_check"]["ok"] = True
+
+                # =========================================================
+                # 2) VALIDITÉ
+                # =========================================================
+
+                # Dates et validité
+                result["certificate"]["validity"]["not_before"] = cert.not_valid_before_utc.isoformat()
+                result["certificate"]["validity"]["not_after"] = cert.not_valid_after_utc.isoformat()
+                now = datetime.now(timezone.utc)
+
+                try:
+                    not_before = cert.not_valid_before_utc
+                    not_after = cert.not_valid_after_utc
+
+                    is_valid = not_before <= now <= not_after
+                    result["certificate"]["validity"]["is_valid_now"] = is_valid
+
+                    # --- Vérification expiration proche ---
+                    days_left = (not_after - now).days
+
+                    if days_left < 0:
+                        result["certificate"]["validity"]["expires_ok"] = False
+                        result["certificate"]["validity"]["expires_soon_comment"] = "Certificat expiré."
+                    elif days_left < 30:
+                        result["certificate"]["validity"]["expires_ok"] = None
+                        result["certificate"]["validity"]["expires_soon_comment"] = (
+                            f"⚠️ Certificat expire bientôt ({days_left} jours restants)."
+                        )
+                    else:
+                        result["certificate"]["validity"]["expires_ok"] = True
+                        result["certificate"]["validity"]["expires_soon_comment"] = (
+                            f"Validité confortable ({days_left} jours restants)."
+                        )
+
+                except Exception:
+                    result["certificate"]["validity"]["is_valid_now"] = False
+                    result["certificate"]["validity"]["expires_ok"] = None
+                    result["certificate"]["validity"]["expires_soon_comment"] = "Impossible d'évaluer la validité."
+
+
+                # =========================================================
+                # 3) CERTIFICAT (version / serial / signature / fingerprint)
+                # =========================================================
+
+                # Check version
+                result["certificate"]["version"]["id"] = cert.version.name
+                if cert.version.name != "v3":
+                    result["certificate"]["version"]["ok"] = False
+                    result["certificate"]["version"]["comment"] = "Certificat non v3 (obsolète)."
+                else:
+                    result["certificate"]["version"]["ok"] = True
+                    result["certificate"]["version"]["comment"] = "Certificat X.509 v3."
+
+                # Analyse numéro de série
+                sn = cert.serial_number
+                bitlen = sn.bit_length()
+                result["certificate"]["serial"]["hex"] = hex(sn)
+                if sn <= 0:
+                    result["certificate"]["serial"]["ok"] = False
+                    result["certificate"]["serial"]["comment"] = "Serial non valide (doit être positif)."
+                elif bitlen < 32:
+                    result["certificate"]["serial"]["ok"] = True
+                    result["certificate"]["serial"]["comment"] = (
+                        f"⚠️ Serial très court ({bitlen} bits) : possible PKI interne/ancienne."
+                    )
+                else:
+                    result["certificate"]["serial"]["ok"] = True
+                    result["certificate"]["serial"]["comment"] = f"Serial OK ({bitlen} bits)."
+
+                # Algorithme (signature hash)
+                try:
+                    sig = cert.signature_hash_algorithm.name.lower()
+                    algo = cert.signature_algorithm_oid._name.lower()
+
+                    result["certificate"]["signature"]["hash_algorithm"] = sig
+
+                    if "md5" in sig:
+                        ok = False
+                        comment = "Signature MD5 (critique)."
+
+                    elif "sha1" in sig:
+                        ok = False
+                        comment = "Signature SHA-1 (obsolète)."
+
+                    elif "dsa" in algo:
+                        ok = None
+                        comment = "Signature DSA (déconseillée)."
+
+                    else:
+                        ok = True
+                        comment = "Signature moderne (SHA-2+)."
+
+                    result["certificate"]["signature"]["ok"] = ok
+                    result["certificate"]["signature"]["comment"] = comment
+
+                except Exception:
+                    result["certificate"]["signature"]["hash_algorithm"] = ""
+
+                # Fingerprint SHA256
+                try:
+                    result["certificate"]["signature"]["fingerprint_sha256"] = (
+                        cert.fingerprint(hashes.SHA256()).hex()
+                    )
+                except Exception:
+                    result["certificate"]["signature"]["fingerprint_sha256"] = ""
+
+                # =========================================================
+                # 4) TRUST (autosigné + chaîne)
+                # =========================================================
+
+                # Auto-signé ?
+                result["trust"]["is_self_signed"] = cert.issuer == cert.subject
+
+                trusted, tls_info = is_chain_trusted_by_mozilla(url)
+                result["trust"]["is_trusted"] = trusted
+                if result["tls"]["negotiated_version"] == "":
+                    if trusted:
+                        result["tls"]["negotiated_version"] = tls_info
+                    else:
+                        result["errors"]["message"] = tls_info
+
+                # =========================================================
+                # 5) CLÉ PUBLIQUE
+                # =========================================================
+
+                # Clé publique (type / taille / courbe si EC)
+                try:
+                    public_key = cert.public_key()
+                    pk_type = public_key.__class__.__name__
+                    pk_size = getattr(public_key, "key_size", None)
+
+                    result["certificate"]["public_key"]["type"] = pk_type
+                    result["certificate"]["public_key"]["size"] = pk_size
+
+                    # PEM
+                    try:
+                        result["certificate"]["public_key"]["pem"] = public_key.public_bytes(
+                            serialization.Encoding.PEM,
+                            serialization.PublicFormat.SubjectPublicKeyInfo,
+                        ).decode()
+                    except Exception:
+                        result["certificate"]["public_key"]["pem"] = ""
+
+                    curve_name = ""
+                    # EC: récupérer la courbe
+                    if hasattr(public_key, "curve") and public_key.curve is not None:
+                        curve_name = getattr(public_key.curve, "name", "") or ""
+                    result["certificate"]["public_key"]["curve"] = curve_name
+
+                    # --- Règles d'évaluation ---
+                    ok = True
+                    comment = ""
+
+                    if pk_type == "RSAPublicKey":
+                        if not pk_size:
+                            ok = None
+                            comment = "Taille RSA inconnue."
+                        elif pk_size < 2048:
+                            ok = False
+                            comment = f"RSA {pk_size} bits (trop faible)."
+                        elif pk_size == 2048:
+                            ok = True
+                            comment = "RSA 2048 bits (minimum moderne)."
+                        elif pk_size == 3072:
+                            ok = True
+                            comment = "RSA 3072 bits (très bien)."
+                        else:  # 4096 ou plus
+                            ok = None
+                            comment = f"RSA {pk_size} bits (OK, mais plus lent / pas forcément utile)."
+
+                    elif pk_type in ("EllipticCurvePublicKey", "ECPublicKey"):
+                        # Courbes recommandées
+                        good = {"secp256r1", "prime256v1", "secp384r1", "secp521r1"}
+                        bad = {"secp192r1", "secp224r1"}
+
+                        c = (curve_name or "").lower()
+
+                        if not c:
+                            ok = None
+                            comment = "Clé EC détectée mais courbe inconnue."
+                        elif c in bad:
+                            ok = False
+                            comment = f"Courbe EC faible/legacy ({curve_name})."
+                        elif c in good:
+                            ok = True
+                            comment = f"Courbe EC moderne ({curve_name})."
+                        else:
+                            ok = None
+                            comment = f"Courbe EC non standard à vérifier ({curve_name})."
+
+                    elif pk_type == "DSAPublicKey":
+                        ok = False
+                        comment = "DSA (déconseillé/obsolète pour TLS serveur)."
+
+                    else:
+                        ok = None
+                        comment = f"Type de clé non standard ({pk_type}) à vérifier."
+
+                    result["certificate"]["public_key"]["ok"] = ok
+                    result["certificate"]["public_key"]["comment"] = comment
+                    # Résumé lisible pour l'UI
+                    if pk_type == "RSAPublicKey":
+                        result["certificate"]["public_key"]["summary"] = f"RSA {pk_size} bits" if pk_size else "RSA (taille inconnue)"
+                    elif pk_type in ("EllipticCurvePublicKey", "ECPublicKey"):
+                        if curve_name:
+                            result["certificate"]["public_key"]["summary"] = f"EC {curve_name} ({pk_size} bits)" if pk_size else f"EC {curve_name}"
+                        else:
+                            result["certificate"]["public_key"]["summary"] = "EC (courbe inconnue)"
+                    elif pk_type == "DSAPublicKey":
+                        result["certificate"]["public_key"]["summary"] = f"DSA {pk_size} bits" if pk_size else "DSA"
+                    else:
+                        result["certificate"]["public_key"]["summary"] = pk_type
+
+                except Exception as e:
+                    result["certificate"]["public_key"]["ok"] = None
+                    result["certificate"]["public_key"]["comment"] = f"⚠️ Impossible d'analyser la clé publique: {e}"
+
+                # =========================================================
+                # 6) EXTENSIONS + CHECKS EXTENSIONS
+                # =========================================================
+
+                # Extensions facultatives
+                for ext_class, key in [
+                    (x509.BasicConstraints, "basic_constraints"),
+                    (x509.KeyUsage, "key_usage"),
+                    (x509.ExtendedKeyUsage, "extended_key_usage"),
+                    (x509.CRLDistributionPoints, "crl_distribution_points"),
+                ]:
+                    try:
+                        ext = cert.extensions.get_extension_for_class(ext_class)
+                        result["certificate"]["extensions"][key] = str(ext.value)
+                    except Exception:
+                        pass
+
+                #Check basic constraints 
+                bc = result["certificate"]["extensions"]["basic_constraints"]
+
+                if bc:
+                    if "CA=True" in bc:
+                        result["certificate"]["extensions"]["basic_constraints_ok"] = False
+                        result["certificate"]["extensions"]["basic_constraints_comment"] = "Certificat marqué comme CA (anormal pour serveur)."
+                    else:
+                        result["certificate"]["extensions"]["basic_constraints_ok"] = True
+                        result["certificate"]["extensions"]["basic_constraints_comment"] = "Certificat non CA."
+                else:
+                    result["certificate"]["extensions"]["basic_constraints_ok"] = None
+                    result["certificate"]["extensions"]["basic_constraints_comment"] = "BasicConstraints absent."
+
+
+                # Check Extended Key Usage (serverAuth obligatoire)
+                eku = result["certificate"]["extensions"]["extended_key_usage"]
+
+                if eku:
+                    if "serverAuth" in eku or "TLS Web Server Authentication" in eku:
+                        result["certificate"]["extensions"]["eku_ok"] = True
+                        result["certificate"]["extensions"]["eku_comment"] = "EKU autorise l'authentification serveur."
+                    else:
+                        result["certificate"]["extensions"]["eku_ok"] = False
+                        result["certificate"]["extensions"]["eku_comment"] = "EKU ne contient pas serverAuth."
+                else:
+                    result["certificate"]["extensions"]["eku_ok"] = None
+                    result["certificate"]["extensions"]["eku_comment"] = "EKU absent."
+
+                # Check Key Usage (digital_signature attendu)
+                ku = result["certificate"]["extensions"]["key_usage"]
+
+                if ku:
+                    if "digital_signature" in ku:
+                        result["certificate"]["extensions"]["ku_ok"] = True
+                        result["certificate"]["extensions"]["ku_comment"] = "digitalSignature présent."
+                    else:
+                        result["certificate"]["extensions"]["ku_ok"] = False
+                        result["certificate"]["extensions"]["ku_comment"] = "digitalSignature absent."
+                else:
+                    result["certificate"]["extensions"]["ku_ok"] = None
+                    result["certificate"]["extensions"]["ku_comment"] = "KeyUsage absent."
+
+                # Check CRL Distribution Points (info uniquement)
+                crl = result["certificate"]["extensions"]["crl_distribution_points"]
+
+                if crl:
+                    result["certificate"]["extensions"]["crl_ok"] = True
+                    result["certificate"]["extensions"]["crl_comment"] = "Point(s) de révocation indiqué(s)."
+                else:
+                    result["certificate"]["extensions"]["crl_ok"] = None
+                    result["certificate"]["extensions"]["crl_comment"] = "Aucun point CRL indiqué."
+
+                # =========================================================
+                # 7) TLS (nv + support + policy + cipher)
+                # =========================================================
+
+                # TLS
+                nv = result["tls"]["negotiated_version"]
+
+                if nv == "TLSv1":
+                    result["tls"]["nv_ok"] = False
+                    result["tls"]["nv_comment"] = "TLS 1.0 est obsolète et vulnérable."
+
+                elif nv == "TLSv1.1":
+                    result["tls"]["nv_ok"] = False
+                    result["tls"]["nv_comment"] = "TLS 1.1 est obsolète (à désactiver)."
+
+                elif nv == "TLSv1.2":
+                    result["tls"]["nv_ok"] = True
+                    result["tls"]["nv_comment"] = "TLS 1.2 est encore sécurisé mais progressivement remplacé par TLS 1.3."
+
+                elif nv == "TLSv1.3":
+                    result["tls"]["nv_ok"] = True
+                    result["tls"]["nv_comment"] = "TLS 1.3 est la version la plus moderne et recommandée."
+
+                else:
+                    result["tls"]["nv_ok"] = None
+                    result["tls"]["nv_comment"] = "Version TLS inconnue ou non analysée."
+                
+                support = {
+                    "TLS1.0": server_supports_tls_version(url, ssl.TLSVersion.TLSv1),
+                    "TLS1.1": server_supports_tls_version(url, ssl.TLSVersion.TLSv1_1),
+                    "TLS1.2": server_supports_tls_version(url, ssl.TLSVersion.TLSv1_2),
+                    "TLS1.3": server_supports_tls_version(url, ssl.TLSVersion.TLSv1_3),
+                }
+                result["tls"]["supported_versions"] = support
+
+                # Politique simple : TLS 1.0/1.1 interdits
+                if support["TLS1.0"] or support["TLS1.1"]:
+                    result["tls"]["policy"]["ok"] = False
+                    bad = []
+                    if support["TLS1.0"]:
+                        bad.append("TLS 1.0")
+                    if support["TLS1.1"]:
+                        bad.append("TLS 1.1")
+                    result["tls"]["policy"]["comment"] = f"Le serveur accepte encore {', '.join(bad)} (obsolète)."
+                else:
+                    result["tls"]["policy"]["ok"] = True
+                    if support["TLS1.3"]:
+                        result["tls"]["policy"]["comment"] = "TLS 1.0/1.1 désactivés. TLS 1.3 supporté."
+                    elif support["TLS1.2"]:
+                        result["tls"]["policy"]["comment"] = "TLS 1.0/1.1 désactivés. TLS 1.2 supporté."
+                    else:
+                        result["tls"]["policy"]["comment"] = "TLS 1.2+ non supporté (problème)."
+
+                # cipher = (name, protocol_version, secret_bits)
+                cipher = ssock.cipher()
+                if cipher:
+                    result["tls"]["cipher"]["name"] = cipher[0]
+                    result["tls"]["cipher"]["protocol"] = cipher[1]
+                    result["tls"]["cipher"]["bits"] = cipher[2]
+
+                name = result["tls"]["cipher"]["name"]
+                bits = result["tls"]["cipher"]["bits"]
+
+                # Vérification basique
+                weak_algorithms = ["RC4", "3DES", "DES", "MD5"]
+
+                if any(w in name for w in weak_algorithms):
+                    result["tls"]["cipher"]["ok"] = False
+                    result["tls"]["cipher"]["comment"] = "Cipher faible détectée (RC4/3DES/DES/MD5)."
+                elif bits < 128:
+                    result["tls"]["cipher"]["ok"] = False
+                    result["tls"]["cipher"]["comment"] = "Taille de clé inférieure à 128 bits."
+                elif "GCM" in name or "CHACHA20" in name:
+                    result["tls"]["cipher"]["ok"] = True
+                    result["tls"]["cipher"]["comment"] = "Cipher moderne sécurisée (AEAD)."
+                else:
+                    result["tls"]["cipher"]["ok"] = True
+                    result["tls"]["cipher"]["comment"] = "Cipher acceptable."
+                
+                # Check if server accept weak ciphers
+                support = result["tls"]["supported_versions"]
+
+                if not (support.get("TLS1.0") or support.get("TLS1.1") or support.get("TLS1.2")):
+                    result["tls"]["weak_cipher_support"] = {}
+                    result["tls"]["weak_cipher_comment"] = "Serveur uniquement TLS 1.3 → pas de ciphers legacy testables."
+                else:
+                    weak_cipher_tests = {
+                        "3DES": "DES-CBC3-SHA",
+                        "AES-CBC": "AES128-SHA:AES256-SHA",
+                        "RC4": "RC4-SHA",
+                        "MD5": "RSA-MD5"
+                    }
+
+                    weak_results = {}
+                    for name, cipher in weak_cipher_tests.items():
+                        accepted = server_accepts_cipher(
+                            hostname,
+                            port,
+                            ssl.TLSVersion.TLSv1_2,
+                            cipher
+                        )
+                        weak_results[name] = accepted
+                    result["tls"]["weak_cipher_support"] = weak_results
+
+                    if any(weak_results.values()):
+                        result["tls"]["weak_cipher_ok"] = False
+                        bad = [k for k, v in weak_results.items() if v]
+                        result["tls"]["weak_cipher_comment"] = (
+                            f"Le serveur accepte encore : {', '.join(bad)}"
+                        )
+                    else:
+                        result["tls"]["weak_cipher_ok"] = True
+                        result["tls"]["weak_cipher_comment"] = "Aucun cipher faible accepté."
+
+    except Exception as e:
+        result["errors"]["message"] = str(e)
+
+    return result
+
+
+def display_ssl_tls(result):
+
+    def add(p, v, c="", com=""):
+        ssl_table.insert("", "end", values=(p, v, c, com))
+
+    cert = result["certificate"]
+    tls = result["tls"]
+    trust = result["trust"]
+
+    # --- Common name ----
+    add("Nom", cert["subject"]["common_name"])
+
+    # --- SAN(s) ----
+    san = cert["subject"]["san_dns"]
+
+    if san:
+        add("Subject Alternative Name", san[0], ck(result["hostname_check"]["match"]),
+            SPACER + result["hostname_check"]["comment"])
+        for s in san[1:]:
+            add("", s)
+    else:
+        add("Subject Alternative Name", "Aucun SAN", "⚠️",
+            SPACER + "Extension SAN absente (certificat legacy / config atypique)")
+
+    # --- SAN number ---
+    add("Nombre de SAN", len(san), ck(result["hostname_check"]["ok"]),
+        SPACER + result["hostname_check"]["warnings"]["multi_domain"])
+
+    # --- Certificat validity ---
+    add("Début de validité", cert["validity"]["not_before"],
+        ck(cert["validity"]["is_valid_now"]),
+        SPACER + ("Certificat valide" if cert["validity"]["is_valid_now"] else "Certificat expiré"))
+    
+    add("Fin de validité", cert["validity"]["not_after"],
+        ck(cert["validity"]["expires_ok"]),
+        SPACER + cert["validity"]["expires_soon_comment"])
+
+    # --- Certificat version ---
+    add("Version du certificat", cert["version"]["id"],
+        ck(cert["version"]["ok"]),
+        SPACER + cert["version"]["comment"])
+
+    # --- Certificat serial num ---
+    add("Serial number", cert["serial"]["hex"],
+        ck(cert["serial"]["ok"]),
+        SPACER + cert["serial"]["comment"])
+
+    # --- Certificat hash algorithm ---
+    add("Algorithme", cert["signature"]["hash_algorithm"],
+        ck(cert["signature"]["ok"]),
+        SPACER + cert["signature"]["comment"])
+
+    # --- Fingerprint ---
+    add("Empreinte", cert["signature"]["fingerprint_sha256"], "ⓘ")
+
+    # --- Authority ---
+    add("Autorité certifiante", cert["issuer"]["common_name"],
+        ck(trust["is_trusted"]),
+        SPACER + ("Autorité reconnue" if trust["is_trusted"] else "Autorité non reconnue"))
+
+    # --- Auto-signed ---
+    add("Auto-signé", trust["is_self_signed"],
+        "✖" if trust["is_self_signed"] else "✔",
+        SPACER + ("Certificat autosigné" if trust["is_self_signed"] else "Certificat non autosigné"))
+
+    # --- Public Key ---
+    add("Clé publique", cert["public_key"].get("summary", ""),
+        ck(cert["public_key"]["ok"]),
+        SPACER + cert["public_key"]["comment"])
+
+    # --- Extensions (basic constraint) ---
+    add("Basic constraints", cert["extensions"]["basic_constraints"],
+        ck(cert["extensions"]["basic_constraints_ok"]),
+        SPACER + cert["extensions"]["basic_constraints_comment"])
+    
+    # --- Extensions (EKU) ---
+    add("KU étendu", cert["extensions"]["extended_key_usage"],
+        ck(cert["extensions"]["eku_ok"]),
+        SPACER + cert["extensions"]["eku_comment"])
+
+    # --- Extensions (KU) ---
+    add("Key usage (KU)", cert["extensions"]["key_usage"],
+        ck(cert["extensions"]["ku_ok"]),
+        SPACER + cert["extensions"]["ku_comment"])
+
+    # --- Extensions (CRL) ---
+    add("Liste de révocation", cert["extensions"]["crl_distribution_points"],
+        ck(cert["extensions"]["crl_ok"]),
+        SPACER + cert["extensions"]["crl_comment"])
+
+    # --- TLS actual version ---
+    add("Version TLS", tls["negotiated_version"], ck(tls["nv_ok"]),
+        SPACER + tls["nv_comment"])
+
+    # --- TLS supported version ---
+    if tls["supported_versions"]:
+        s = tls["supported_versions"]
+        for v in ["TLS1.0", "TLS1.1", "TLS1.2", "TLS1.3"]:
+            if v in ["TLS1.0", "TLS1.1"]:
+                check_icon = "✖" if s[v] else "✔"
+            else:
+                check_icon = ck(s[v])
+
+            add(
+                f"Support {v}",
+                "Oui" if s[v] else "Non",
+                check_icon,
+                SPACER + (
+                    "À désactiver" if v in ["TLS1.0", "TLS1.1"] and s[v]
+                    else "OK" if s[v]
+                    else "Non supporté"
+                )
+            )
+
+    # --- TLS policy ---
+    add("Politique TLS",
+        "OK" if tls["policy"]["ok"] else "KO",
+        ck(tls["policy"]["ok"]),
+        SPACER + tls["policy"]["comment"])
+
+    # --- Cipher Suite ---
+    add("Cipher Suite", tls["cipher"]["name"], ck(tls["cipher"]["ok"]),
+        SPACER + tls["cipher"]["comment"])
+    add("Taille de clé (bits)", tls["cipher"]["bits"], "ⓘ")
+
+    # --- Weak cipher legacy (TLS ≤ 1.2) ---
+    add(
+        "Ciphers faibles (legacy)",
+        "OK" if tls.get("weak_cipher_ok") else "Faible" if tls.get("weak_cipher_ok") is False else "Non testé",
+        ck(tls.get("weak_cipher_ok")),
+        SPACER + tls.get("weak_cipher_comment", "")
+    )
+
+
+def check_cookies(result):
     return None
 
 
-def affichage_http(result):
-    spacer: str = "               "
-
-    # Display the result in HTTP table
-    http_table.insert("", "end", values=("Code de statut", result["status_code"], spacer + result["status_message"]))
-    http_table.insert("", "end", values=("Version HTTP", result["http_version"][0], spacer + result["http_version"][1]))
-    http_table.insert("", "end", values=("HTTPS activé", "Oui" if result["uses_https"] else "Non", spacer + result["https_comment"]))
-    
-    # If HTTPS is used display result for mixed content
-    if result["uses_https"]:
-        http_table.insert("", "end", values=("Contenu mixte", "Oui" if result["mixed_content"] else "Non", spacer + result["mixed_comment"]))
-        
-        # Display URL and type of mixed contents
-        if result["mixed_url"]:
-            count = 1
-            for url, tag in result["mixed_url"]:
-                http_table.insert("", "end", values=(f"URL mixte #{count}", url, spacer + tag))
-                count += 1
-    
-    http_table.insert("", "end", values=("URL saisie", result["original_url"], ""))
-    http_table.insert("", "end", values=("URL finale", result["final_url"], ""))
-    http_table.insert("", "end", values=("Temps de réponse", result["time"], spacer + result["time_comment"]))
-
-    # Display missing security headers => MUST DO TUPLE LIKE MIXED CONTENT
-    if result["missing_headers"]:
-        for i, (header, comment) in enumerate(zip(result["missing_headers"], result["headers_comment"])):
-            if i == 0:
-                http_table.insert("", "end", values=("Header de sécurité absent", header, spacer + comment))
-            else:
-                http_table.insert("", "end", values=("", header, spacer + comment))
-
-    # Display redirection results
-    http_table.insert("", "end", values=("Nombre de redirection", result["redirects"]["num_redirects"], spacer + result["redirects"]["num_comment"]))
-    
-    if result["redirects"]["num_redirects"] != 0:
-        http_table.insert("", "end", values=("Domaines de redirection", result["redirects"]["redirect_domains"][0], spacer + result["redirects"]["rd_comment"]))
-        for domaine in result["redirects"]["redirect_domains"][1:]:
-            http_table.insert("", "end", values=("", domaine, ""))
-    
-    if result["redirects"]["redirect_ips"] != []:
-        http_table.insert("", "end", values=("IPs de redirection", result["redirects"]["redirect_ips"][0], ""))
-        http_table.insert("", "end", values=("", result["redirects"]["redirect_ips"][1:], ""))
+def display_cookies(result):
+    return None
 
 
 def max_risk(current, new): #CHECK OWASP
@@ -273,11 +1072,17 @@ def start_scan():
 
             # Step 2 : HTTP request
             update_progress(20)
-            result = check_http_config(url)
-            update_progress(70)
+            result_http = check_http_config(url)
+
+            
+            # Step 3 SSL / TLS 
+            update_progress(40)
+            result_ssl = check_ssl_tls_config(url)
 
             # Step 3 : Display results
-            affichage_http(result)
+            update_progress(80)
+            display_http(result_http)
+            display_ssl_tls(result_ssl)
             update_progress(90)
 
             # Final step
@@ -297,6 +1102,7 @@ def start_scan():
 
 def open_settings():
     messagebox.showinfo("Settings")
+
 
 def open_report():
     messagebox.showinfo("Report")

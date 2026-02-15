@@ -12,3 +12,6 @@ HEADER = {
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/121.0.0.0 Safari/537.36"
 }
+
+
+SPACER: str = "               "
