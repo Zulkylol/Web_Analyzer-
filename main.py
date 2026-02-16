@@ -29,10 +29,11 @@ except ImportError:
     httpx = None
 
 
-
-
-# ------------------ Functions ------------------
 def check_http_config(url: str) -> dict:
+
+    raw_url = url
+    url = normalize_url(url)
+
     result = {
         "status_code": 0,
         "status_ok" : False,
@@ -46,6 +47,7 @@ def check_http_config(url: str) -> dict:
         "mixed_url": [],
         "mixed_comment": "Aucun contenu mixte détecté",
         "original_url": url,
+        "input_url" : raw_url,
         "final_url": None,
         "time": 0.0,
         "time_comment": "",
@@ -56,8 +58,6 @@ def check_http_config(url: str) -> dict:
         "comment": "",
     }
 
-    url = normalize_url(url)
-
     try:
         response = requests.get(
             url,
@@ -65,58 +65,98 @@ def check_http_config(url: str) -> dict:
             timeout=5,
             allow_redirects=True,
         )
-
-        
+    # =========================================================
+    # 1)----------- CHECK HTTP CODE AND MAPPING) --------------
+    # =========================================================
+        # Check HTTP response code and map it
         result["status_code"] = response.status_code
-        result["status_ok"] = True if 200 <= result["status_code"] < 400 else None
         result["status_message"] = HTTP_STATUS_CODES.get(response.status_code, "Code inconnu")
-
-        # Various URL Check
+        
+        if 200 <= response.status_code < 400:
+            result["status_ok"] = True
+        elif 400 <= response.status_code < 500:
+            result["status_ok"] = None  # client error (warning)
+        else:
+            result["status_ok"] = False  # 5xx serveur KO
+        
+        
+    # =========================================================
+    # 2)---------------- VARIOUS URL CHECKS ------------------- 
+    # =========================================================
         result["final_url"] = response.url
         original_parsed = urlparse(result["original_url"])
         final_parsed = urlparse(result["final_url"])
 
-        # Valeurs par défaut
+        # findings = liste of findings (severity, ok_value, message)
+        # ok_value: False = KO, None = Warning, True = OK/info
+        findings = []
+
+        def add_finding(ok_value, message, severity_weight):
+            """
+            severity_weight: 3 = critique, 2 = warning, 1 = info/positif
+            ok_value: False / None / True
+            """
+            findings.append({
+                "ok": ok_value,
+                "weight": severity_weight,
+                "message": message
+            })
+
+        # a) Credentials dans l'URL (critique)
+        if (original_parsed.username or original_parsed.password or
+            final_parsed.username or final_parsed.password):
+            add_finding(False, "Credentials détectés dans l’URL", 3)
+
+        # b) Downgrade HTTPS -> HTTP (critique)
+        if original_parsed.scheme == "https" and final_parsed.scheme == "http":
+            add_finding(False, "Downgrade HTTPS → HTTP", 3)
+
+        # c) Upgrade HTTP -> HTTPS (positif / info)
+        if original_parsed.scheme == "http" and final_parsed.scheme == "https":
+            add_finding(True, "Redirection HTTP → HTTPS (sécurisé)", 1)
+
+        # d) Changement d’hôte (warning)
+        if (original_parsed.hostname and final_parsed.hostname and
+            original_parsed.hostname.lower() != final_parsed.hostname.lower()):
+            add_finding(None, f"Changement d’hôte ({original_parsed.hostname} → {final_parsed.hostname})", 2)
+
+        # Default values
         result["url_ok"] = True
         result["url_comment"] = "OK"
+        result["url_findings"] = []
 
-        # 1️⃣ Credentials dans URL (KO)
-        if original_parsed.username or original_parsed.password \
-        or final_parsed.username or final_parsed.password:
-            result["url_ok"] = False
-            result["url_comment"] = "Credentials détectés dans l’URL"
+        if findings:
+            # Trier par gravité (poids décroissant), puis par "ok" (False > None > True)
+            order_ok = {False: 0, None: 1, True: 2}
+            findings_sorted = sorted(
+                findings,
+                key=lambda f: (-f["weight"], order_ok.get(f["ok"], 99))
+            )
 
-        # 2️⃣ Downgrade HTTPS → HTTP (KO)
-        elif original_parsed.scheme == "https" and final_parsed.scheme == "http":
-            result["url_ok"] = False
-            result["url_comment"] = "Downgrade HTTPS → HTTP"
+            # Le constat le plus grave devient le verdict global
+            top = findings_sorted[0]
+            result["url_ok"] = top["ok"]
+            result["url_comment"] = top["message"]
 
-        # 3️⃣ Upgrade HTTP → HTTPS (OK renforcé)
-        elif original_parsed.scheme == "http" and final_parsed.scheme == "https":
-            result["url_ok"] = True
-            result["url_comment"] = "Redirection HTTP → HTTPS (sécurisé)"
-
-        # 4️⃣ Changement hostname (Warning)
-        elif original_parsed.hostname and final_parsed.hostname \
-            and original_parsed.hostname.lower() != final_parsed.hostname.lower():
-            result["url_ok"] = None   # warning
-            result["url_comment"] = f"Changement d’hôte ({original_parsed.hostname} → {final_parsed.hostname})"
+            # Garder tous les constats pour affichage détaillé si tu veux
+            result["url_findings"] = [f["message"] for f in findings_sorted]
 
 
-        # HTTP version 
+    # =========================================================
+    # 3)--------------- HTTP VERSION CHECKS -------------------
+    # =========================================================
         if httpx:
             try:
                 with httpx.Client(http2=True, timeout=5) as c:
                     r2 = c.get(url)
-                    result["http_version"] = r2.http_version.upper()
+                    hv = getattr(r2, "http_version", "") or ""
+                    result["http_version"] = hv.upper()
             except Exception:
                 pass
 
         if not result["http_version"]:
             v = getattr(response.raw, "version", None)
-
             version_label, version_comment = map_http_version(v)
-
             result["http_version"] = version_label
             result["http_comment"] = version_comment
 
@@ -132,8 +172,10 @@ def check_http_config(url: str) -> dict:
         result["uses_https"] = result["final_url"].startswith("https://")
         result["https_comment"] = "Site sécurisé (HTTPS)" if result["uses_https"] else "Site non sécurisé (HTTP)"
 
-        # Temps
-        
+
+    # =========================================================
+    # 4)-------------- RESPONSE TIME CHECKS -------------------
+    # =========================================================
         result["time"] = response.elapsed.total_seconds()
         t = result["time"]
         if t < 0.8:
@@ -150,7 +192,9 @@ def check_http_config(url: str) -> dict:
             result["time_comment"] = "Très lent ou proche timeout"
 
 
-        # Headers sécurité
+    # =========================================================
+    # 5)------------ SECURITY HEADERS CHECKS -----------------
+    # =========================================================
         for h in SECURITY_HEADERS:
             if h == "Content-Security-Policy":
                 csp_value = (
@@ -170,17 +214,11 @@ def check_http_config(url: str) -> dict:
                 result["missing_headers"].append(h)
                 result["headers_comment"].append("absent")
 
-        print("Server:", response.headers.get("Server"))
-        print("Set-Cookie sample:", response.headers.get("Set-Cookie", "")[:120])
-        print("First bytes:", response.text[:120])
 
-
-        print("FINAL:", response.status_code, response.url)
-        print("SAMPLE HEADERS:", sorted(list(response.headers.keys()))[:30])
-
-        # Mixed content (statique simple mais élargi)
+    # =========================================================
+    # 6)------------- MIXED CONTENT DETECTION -----------------
+    # =========================================================
         if result["uses_https"]:
-            from bs4 import BeautifulSoup
             soup = BeautifulSoup(response.text, "html.parser")
 
             tags_attrs = {
@@ -195,7 +233,6 @@ def check_http_config(url: str) -> dict:
             }
 
             mixed = []
-
             for tag, attrs in tags_attrs.items():
                 for elem in soup.find_all(tag):
                     for attr in attrs:
@@ -212,28 +249,76 @@ def check_http_config(url: str) -> dict:
 
             # style inline
             for elem in soup.find_all(style=True):
-                css = elem.get("style")
+                css = elem.get("style") or ""
                 for u in re.findall(r'url\(\s*["\']?(http://[^"\')\s]+)', css):
                     mixed.append((u, "inline-style"))
+            
+            # CSS externes
+            for link in soup.find_all("link", href=True):
+                rel = link.get("rel") or []
+                if any(r.lower() == "stylesheet" for r in rel):
+                    css_url = urljoin(result["final_url"], link["href"])
+
+                    try:
+                        css_resp = requests.get(
+                            css_url,
+                            headers={"User-Agent": "Mozilla/5.0"},
+                            timeout=3,
+                        )
+
+                        for u in re.findall(r'url\(\s*["\']?(http://[^"\')\s]+)', css_resp.text):
+                            mixed.append((u, "external-css"))
+
+                    except Exception:
+                        # on ignore silencieusement si CSS inaccessible
+                        pass
 
             if mixed:
                 result["mixed_content"] = True
                 result["mixed_comment"] = f"{len(mixed)} ressources HTTP détectées"
                 result["mixed_url"] = list(set(mixed))
 
-        # Redirections corrigées
+
+    # =========================================================
+    # 7)----------- CALL check_http_redirections() ------------
+    # =========================================================
         result["redirects"] = check_http_redirections(response, url)
 
+    # =========================================================
+    # 8)----------- EXCEPTIONS MANAGMENT 
+    # =========================================================
+    except requests.exceptions.SSLError as e:
+        txt = repr(e)
+
+        if "CERTIFICATE_VERIFY_FAILED" in txt and "unable to get local issuer certificate" in txt:
+            result["comment"] = (
+                "Erreur TLS/SSL : vérification du certificat impossible "
+                "(CA intermédiaire manquante / chaîne incomplète). "
+                "Le navigateur peut réussir via cache, mais Python/OpenSSL échoue."
+            )
+        elif "CERTIFICATE_VERIFY_FAILED" in txt:
+            result["comment"] = (
+                "Erreur TLS/SSL : vérification du certificat impossible "
+                "(CERTIFICATE_VERIFY_FAILED)."
+            )
+        else:
+            result["comment"] = f"Erreur TLS/SSL : {e}"
+    except requests.exceptions.ConnectTimeout:
+        result["comment"] = "Timeout de connexion (ConnectTimeout)"
+    except requests.exceptions.ReadTimeout:
+        result["comment"] = "Timeout de lecture (ReadTimeout)"
+    except requests.exceptions.ConnectionError as e:
+        result["comment"] = f"Connexion impossible : {e}"
     except requests.exceptions.RequestException as e:
         result["comment"] = f"Erreur réseau : {e}"
-
     return result
-
+    
 
 def check_http_redirections(response, original_url: str) -> dict:
     history = response.history or []
     result = {
         "num_redirects": len(history),
+        "num_ok" : False,
         "num_comment": "",
         "redirect_domains": [],
         "rd_comment": "",     
@@ -262,14 +347,18 @@ def check_http_redirections(response, original_url: str) -> dict:
                 pass
 
     # Volume redirections
-    if len(history) > 5:
+    if len(history) > 6:
         result["risk"] = "High"
         result["num_comment"] = "Nombre excessif de redirections !"
+        result["num_ok"] = False
     elif len(history) > 2:
         result["risk"] = "Medium"
         result["num_comment"] = "Plusieurs redirections détectées."
+        result["num_ok"] = None
     else:
         result["num_comment"] = "Nombre de redirection(s) normal"
+        result["num_ok"] = True
+    
 
     # Changement de domaine
     if initial_domain:
@@ -291,7 +380,7 @@ def check_http_redirections(response, original_url: str) -> dict:
 
 def display_http(result):
     # Helper pour insérer une ligne 4 colonnes
-    def add_row(param, value="", check="ℹ️", comment=""):
+    def add_row(param, value="", check="ⓘ", comment=""):
         http_table.insert("", "end", values=(param, value, check, comment))
 
     # Nettoyage léger (évite KeyError)
@@ -324,6 +413,11 @@ def display_http(result):
     # --- URLs 
     add_row("URL saisie", result.get("original_url", ""), "ⓘ", "")
     add_row("URL finale", result.get("final_url", ""), ck(result["url_ok"]),result["url_comment"])
+
+    extra = result.get("url_findings") or []
+    for msg in extra[1:]:
+        add_row("", "", "ⓘ", msg)   # ou mets l’URL en colonne value si tu préfères
+
 
     # Temps
     t = result.get("time", 0.0)
@@ -361,16 +455,16 @@ def display_http(result):
     num_redir = redirects.get("num_redirects", 0)
     risk = redirects.get("risk", "Low")
 
-    risk_icon = {"Low": "✅", "Medium": "⚠️", "High": "❌"}.get(risk, "ℹ️")
-    add_row("Nombre de redirections", str(num_redir), risk_icon, redirects.get("num_comment", ""))
+    risk_icon = {"Low": "✅", "Medium": "⚠️", "High": "❌"}.get(risk, "ⓘ")
+    add_row("Nombre de redirections", str(num_redir), ck(redirects["num_ok"]), redirects.get("num_comment", ""))
 
     # Domaines
     r_domains = redirects.get("redirect_domains") or []
     if r_domains:
         # commentaire global (rd_comment) sur la 1ère ligne
-        add_row("Domaines de redirection", r_domains[0], "ℹ️", redirects.get("rd_comment", ""))
+        add_row("Domaines de redirection", r_domains[0], "ⓘ", redirects.get("rd_comment", ""))
         for dom in r_domains[1:]:
-            add_row("", dom, "ℹ️", "")
+            add_row("", dom, "ⓘ", "")
 
     # IPs
     r_ips = redirects.get("redirect_ips") or []
