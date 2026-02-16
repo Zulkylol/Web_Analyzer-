@@ -35,8 +35,11 @@ except ImportError:
 def check_http_config(url: str) -> dict:
     result = {
         "status_code": 0,
+        "status_ok" : False,
         "status_message": "",
         "http_version": "",
+        "http_ok" : False,
+        "http_comment" : "",
         "uses_https": False,
         "https_comment": "",
         "mixed_content": False,
@@ -46,23 +49,12 @@ def check_http_config(url: str) -> dict:
         "final_url": None,
         "time": 0.0,
         "time_comment": "",
+        "time_ok" : False,
         "missing_headers": [],
         "headers_comment": [],
         "redirects": {},
         "comment": "",
     }
-
-    SECURITY_HEADERS = [
-        "Strict-Transport-Security",
-        "Content-Security-Policy",
-        "X-Frame-Options",
-        "X-Content-Type-Options",
-        "Referrer-Policy",
-        "Permissions-Policy",
-        "Cross-Origin-Opener-Policy",
-        "Cross-Origin-Embedder-Policy",
-        "Cross-Origin-Resource-Policy",
-    ]
 
     url = normalize_url(url)
 
@@ -74,11 +66,44 @@ def check_http_config(url: str) -> dict:
             allow_redirects=True,
         )
 
-        result["final_url"] = response.url
+        
         result["status_code"] = response.status_code
+        result["status_ok"] = True if 200 <= result["status_code"] < 400 else None
         result["status_message"] = HTTP_STATUS_CODES.get(response.status_code, "Code inconnu")
 
-        # HTTP version (simple mais mieux que raw.version seul)
+        # Various URL Check
+        result["final_url"] = response.url
+        original_parsed = urlparse(result["original_url"])
+        final_parsed = urlparse(result["final_url"])
+
+        # Valeurs par défaut
+        result["url_ok"] = True
+        result["url_comment"] = "OK"
+
+        # 1️⃣ Credentials dans URL (KO)
+        if original_parsed.username or original_parsed.password \
+        or final_parsed.username or final_parsed.password:
+            result["url_ok"] = False
+            result["url_comment"] = "Credentials détectés dans l’URL"
+
+        # 2️⃣ Downgrade HTTPS → HTTP (KO)
+        elif original_parsed.scheme == "https" and final_parsed.scheme == "http":
+            result["url_ok"] = False
+            result["url_comment"] = "Downgrade HTTPS → HTTP"
+
+        # 3️⃣ Upgrade HTTP → HTTPS (OK renforcé)
+        elif original_parsed.scheme == "http" and final_parsed.scheme == "https":
+            result["url_ok"] = True
+            result["url_comment"] = "Redirection HTTP → HTTPS (sécurisé)"
+
+        # 4️⃣ Changement hostname (Warning)
+        elif original_parsed.hostname and final_parsed.hostname \
+            and original_parsed.hostname.lower() != final_parsed.hostname.lower():
+            result["url_ok"] = None   # warning
+            result["url_comment"] = f"Changement d’hôte ({original_parsed.hostname} → {final_parsed.hostname})"
+
+
+        # HTTP version 
         if httpx:
             try:
                 with httpx.Client(http2=True, timeout=5) as c:
@@ -89,26 +114,69 @@ def check_http_config(url: str) -> dict:
 
         if not result["http_version"]:
             v = getattr(response.raw, "version", None)
-            if v == 10:
-                result["http_version"] = "HTTP/1.0"
-            elif v == 11:
-                result["http_version"] = "HTTP/1.1"
+
+            version_label, version_comment = map_http_version(v)
+
+            result["http_version"] = version_label
+            result["http_comment"] = version_comment
+
+            # Déterminer http_ok en fonction de la version
+            if v in (11, 20):           # HTTP/1.1 ou HTTP/2
+                result["http_ok"] = True
+            elif v in (9, 10):          # Obsolètes
+                result["http_ok"] = False
+            else:
+                result["http_ok"] = None
 
         # HTTPS
         result["uses_https"] = result["final_url"].startswith("https://")
         result["https_comment"] = "Site sécurisé (HTTPS)" if result["uses_https"] else "Site non sécurisé (HTTP)"
 
         # Temps
+        
         result["time"] = response.elapsed.total_seconds()
-        result["time_comment"] = f"{result['time']:.2f}s"
+        t = result["time"]
+        if t < 0.8:
+            result["time_ok"] = True
+            result["time_comment"] = "Temps de réponse rapide"
+        elif t < 2:
+            result["time_ok"] = True
+            result["time_comment"] = "Temps correct"
+        elif t < 5:
+            result["time_ok"] = None
+            result["time_comment"] = "Temps de réponse lent"
+        else:
+            result["time_ok"] = False
+            result["time_comment"] = "Très lent ou proche timeout"
+
 
         # Headers sécurité
         for h in SECURITY_HEADERS:
+            if h == "Content-Security-Policy":
+                csp_value = (
+                    response.headers.get("Content-Security-Policy")
+                    or response.headers.get("Content-Security-Policy-Report-Only")
+                )
+                if csp_value:
+                    result["headers_comment"].append("present")
+                else:
+                    result["missing_headers"].append(h)
+                    result["headers_comment"].append("absent")
+                continue
+
             if response.headers.get(h):
                 result["headers_comment"].append("present")
             else:
                 result["missing_headers"].append(h)
                 result["headers_comment"].append("absent")
+
+        print("Server:", response.headers.get("Server"))
+        print("Set-Cookie sample:", response.headers.get("Set-Cookie", "")[:120])
+        print("First bytes:", response.text[:120])
+
+
+        print("FINAL:", response.status_code, response.url)
+        print("SAMPLE HEADERS:", sorted(list(response.headers.keys()))[:30])
 
         # Mixed content (statique simple mais élargi)
         if result["uses_https"]:
@@ -238,28 +306,28 @@ def display_http(result):
         return
 
     # --- Status / HTTP version / HTTPS
-    add_row("Code de statut", str(result.get("status_code", "")), "✅" if 200 <= result.get("status_code", 0) < 400 else "⚠️",
+    add_row("Code de statut", str(result.get("status_code", "")), ck(result["status_ok"]),
             result.get("status_message", ""))
 
     http_version = result.get("http_version") or ""
     if http_version:
         # si tu stockes "HTTP/2" directement
-        add_row("Version HTTP", http_version, "✅", "")
+        add_row("Version HTTP", http_version, ck(result["http_ok"]), result["http_comment"])
     else:
         add_row("Version HTTP", "Inconnue", "⚠️", "Impossible de déterminer la version HTTP")
 
     uses_https = bool(result.get("uses_https"))
     add_row("HTTPS activé", "Oui" if uses_https else "Non",
-            "✅" if uses_https else "❌",
+            ck(result["uses_https"]),
             result.get("https_comment", ""))
 
-    # --- URLs & perf
-    add_row("URL saisie", result.get("original_url", ""), "ℹ️", "")
-    add_row("URL finale", result.get("final_url", ""), "ℹ️", "")
+    # --- URLs 
+    add_row("URL saisie", result.get("original_url", ""), "ⓘ", "")
+    add_row("URL finale", result.get("final_url", ""), ck(result["url_ok"]),result["url_comment"])
 
     # Temps
     t = result.get("time", 0.0)
-    add_row("Temps de réponse", f"{t:.2f}s" if isinstance(t, (int, float)) else str(t), "ℹ️", result.get("time_comment", ""))
+    add_row("Temps de réponse",result["time"] ,ck(result["time_ok"]), result["time_comment"])
 
     # --- Mixed content (si HTTPS)
     if uses_https:
@@ -287,6 +355,7 @@ def display_http(result):
         for i, header in enumerate(missing_headers, start=1):
             param = "Headers sécu manquants" if i == 1 else ""
             add_row(param, header, "❌", "absent")
+            
 
     # --- Redirections
     num_redir = redirects.get("num_redirects", 0)
