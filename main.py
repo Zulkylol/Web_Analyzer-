@@ -4,8 +4,8 @@ import ttkbootstrap as ttk
 from ttkbootstrap.constants import SUCCESS, INFO, WARNING
 from tkinter import messagebox
 
-from core.scan_http import scan_http_config
-from core.scan_tls import scan_tls_config
+from core.http.scan_http import scan_http_config
+from core.tls.scan_tls import scan_tls_config
 from ui.tables import create_result_table, clear_tables
 from ui.display import display_http, display_ssl_tls
 
