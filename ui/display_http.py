@@ -10,42 +10,37 @@ def display_http(result, http_table):
     def add_row(param, value="", check=STATUS_ICON["info"], comment=""):
         http_table.insert("", "end", values=(param, value, check, comment))
 
-    # =========================================================
-    # 1)------------------- DATA CLEANING ---------------------
-    # =========================================================
+    # ------------------- DATA CLEANING ---------------------
     redirects = result.get("redirects") or {}
     missing_headers = result.get("missing_headers") or []
     headers_comment = result.get("headers_comment") or []
     mixed_urls = result.get("mixed_url") or []
 
 
-    # =========================================================
-    # 2)-------------- HTTP VERSION + HTTPS -------------------
-    # =========================================================
-    # Si erreur HTTP → afficher uniquement l'erreur et stop
+    # -------------- HTTP VERSION + HTTPS -------------------
+    # If HTTP error -> display and stop
     if result.get("comment"):
         add_row("Erreur HTTP", result.get("status_message", ""), STATUS_ICON["ok"], result.get("comment", ""))
         return
 
-    # Status / HTTP version / HTTPS
+    # Status 
     add_row("Code de statut", str(result.get("status_code", "")), ck(result["status_ok"]),
             result.get("status_message", ""))
 
+    # HTTP version
     http_version = result.get("http_version") or ""
     if http_version:
-        # si tu stockes "HTTP/2" directement
         add_row("Version HTTP", http_version, ck(result["http_ok"]), result["http_comment"])
     else:
         add_row("Version HTTP", "Inconnue", STATUS_ICON["invalid"], "Impossible de déterminer la version HTTP")
 
+    # HTTPS
     uses_https = bool(result.get("uses_https"))
     add_row("HTTPS activé", "Oui" if uses_https else "Non",
             ck(result["uses_https"]),
             result.get("https_comment", ""))
 
-    # =========================================================
-    # 3)---------------------- URLS ---------------------------
-    # =========================================================
+    # ---------------------- URLS ---------------------------
     add_row("URL saisie", result.get("original_url", ""), STATUS_ICON["info"], "")
     add_row("URL finale", result.get("final_url", ""), ck(result["url_ok"]),result["url_comment"])
 
@@ -53,17 +48,11 @@ def display_http(result, http_table):
     for msg in extra[1:]:
         add_row("", "", STATUS_ICON["info"], msg)   
 
-
-    # =========================================================
-    # 4)---------------------- TIME ---------------------------
-    # =========================================================
+    # ---------------------- TIME ---------------------------
     t = result.get("time", 0.0)
     add_row("Temps de réponse",result["time"] ,ck(result["time_ok"]), result["time_comment"])
 
-
-    # =========================================================
-    # 5)----------------- MIXED CONTENT -----------------------
-    # =========================================================
+    # ----------------- MIXED CONTENT -----------------------
     if uses_https:
         mixed = bool(result.get("mixed_content"))
         add_row("Contenu mixte", "Oui" if mixed else "Non",
@@ -83,9 +72,7 @@ def display_http(result, http_table):
                 add_row(param, url_m, STATUS_ICON["warning"], origin)
 
 
-    # =========================================================
-    # 6)---------------- SECURITY HEADERS----------------------
-    # =========================================================
+    # ---------------- SECURITY HEADERS----------------------
     if result.get("header_findings"):
         for i, f in enumerate(result["header_findings"], start=1):
             param = "Headers de sécurité" if i == 1 else ""
@@ -99,17 +86,14 @@ def display_http(result, http_table):
                 add_row("", "↳ Recommandation", STATUS_ICON["info"], f'{f["recommendation"]}')
 
 
-
-    # =========================================================
-    # 6)------------------ REDIRECTIONS ----------------------
-    # =========================================================
+    # ------------------ REDIRECTIONS ----------------------
     num_redir = redirects.get("num_redirects", 0)
     risk = redirects.get("risk", "Low")
 
     risk_icon = {"Low": STATUS_ICON["ok"], "Medium": STATUS_ICON["warning"], "High": STATUS_ICON["high"]}.get(risk, STATUS_ICON["info"])
     add_row("Nombre de redirections", str(num_redir), ck(redirects["num_ok"]), redirects.get("num_comment", ""))
 
-    # Domaines
+    # Domains
     r_domains = redirects.get("redirect_domains") or []
     if r_domains:
         add_row("Domaines de redirection", r_domains[0], STATUS_ICON["info"], redirects.get("rd_comment", ""))

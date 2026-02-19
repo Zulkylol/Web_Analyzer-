@@ -1,22 +1,21 @@
 import re
 from urllib.parse import urljoin
-
 import requests
 from bs4 import BeautifulSoup
 
-# =========================================================
-# 8)------------- MIXED CONTENT DETECTION -----------------
-# =========================================================
-def detect_mixed_content(html: str, final_url: str, uses_https: bool):
+# ===============================================================
+# FUNCTION : detect_mixed_content 
+# ===============================================================
+def detect_mixed_content(html: str, final_url: str, uses_https: bool) -> tuple[bool, list[tuple[str, str]], str]:
     """
-    Detect mixed content (HTTP resources inside HTTPS page).
+    Detect HTTP (mixed) resources in an HTTPS page.
 
     Returns:
-        mixed_content (bool)
-        mixed_url (list[tuple[str, str]])
-        mixed_comment (str)
+        tuple[bool, list[tuple[str, str]], str]:
+            - Whether mixed content was detected
+            - List of (resource_url, location)
+            - Summary message
     """
-
     if not uses_https:
         return False, [], "Aucun contenu mixte détecté"
 
@@ -35,6 +34,7 @@ def detect_mixed_content(html: str, final_url: str, uses_https: bool):
 
     mixed = []
 
+    # ---------------- TAGS_ATTRS ------------------
     for tag, attrs in tags_attrs.items():
         for elem in soup.find_all(tag):
             for attr in attrs:
@@ -51,13 +51,14 @@ def detect_mixed_content(html: str, final_url: str, uses_https: bool):
                 elif isinstance(val, str) and val.startswith("http://"):
                     mixed.append((val, f"{tag}[{attr}]"))
 
-    # Inline CSS
+    # ---------------- INLINE CSS ------------------
     for elem in soup.find_all(style=True):
         css = elem.get("style") or ""
         for u in re.findall(r'url\(\s*["\']?(http://[^"\')\s]+)', css):
             mixed.append((u, "inline-style"))
 
-    # External CSS
+
+    # --------------- EXTERNAL CSS -----------------
     for link in soup.find_all("link", href=True):
         rel = link.get("rel") or []
         if any(r.lower() == "stylesheet" for r in rel):

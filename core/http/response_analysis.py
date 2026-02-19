@@ -20,9 +20,9 @@ def evaluate_status(response) -> tuple[int, str, bool | None]:
     if 200 <= status_code < 400:
         status_ok = True
     elif 400 <= status_code < 500:
-        status_ok = None  # client error (warning)
+        status_ok = None  # Client error
     else:
-        status_ok = False  # 5xx serveur KO
+        status_ok = False  # 5xx server KO
 
     return status_code, status_message, status_ok
 
@@ -43,7 +43,7 @@ def detect_http_version(url: str, response, httpx_module) -> tuple[str, bool | N
     http_comment = ""
     http_ok = None
 
-    # 1) Essai via httpx (si dispo)
+    # ------------------ TRY VIA HTTPX ---------------------
     if httpx_module:
         try:
             with httpx_module.Client(http2=True, timeout=5) as c:
@@ -52,22 +52,21 @@ def detect_http_version(url: str, response, httpx_module) -> tuple[str, bool | N
                 http_version = hv.upper()
         except Exception:
             pass
-
-    # 2) Fallback via requests/raw.version
+    
+    # -------------- FALLBACK VIA REQUEST/RAW --------------
     if not http_version:
         v = getattr(getattr(response, "raw", None), "version", None)
         version_label, version_comment = map_http_version(v)
         http_version = version_label
         http_comment = version_comment
 
-        if v in (11, 20):      # HTTP/1.1 ou HTTP/2
+        if v in (11, 20):      # HTTP/1.1 or HTTP/2
             http_ok = True
-        elif v in (9, 10):     # obsolètes
+        elif v in (9, 10):     # obsoletes
             http_ok = False
         else:
             http_ok = None
     else:
-        # Si httpx te donne HTTP/2, c'est OK (sinon unknown -> None)
         if http_version in ("HTTP/2", "HTTP/1.1"):
             http_ok = True
         elif http_version in ("HTTP/1.0", "HTTP/0.9"):

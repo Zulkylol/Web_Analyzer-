@@ -1,59 +1,51 @@
+# ===============================================================
+# IMPORTS
+# ===============================================================
 
-
-# def scan_security_headers(headers, required_headers: list[str]):
-#     """
-#     Analyse les en-têtes de sécurité.
-
-#     Args:
-#         headers: Mapping/dict-like (ex: response.headers)
-#         required_headers (list[str]): Liste des headers attendus.
-
-#     Returns:
-#         tuple[list[str], list[str]]: (missing_headers, headers_comment)
-#         headers_comment est aligné avec required_headers ("present"/"absent").
-#     """
-#     missing_headers: list[str] = []
-#     headers_comment: list[str] = []
-
-#     for h in required_headers:
-#         if h == "Content-Security-Policy":
-#             csp_value = (
-#                 headers.get("Content-Security-Policy")
-#                 or headers.get("Content-Security-Policy-Report-Only")
-#             )
-#             if csp_value:
-#                 headers_comment.append("present")
-#             else:
-#                 missing_headers.append(h)
-#                 headers_comment.append("absent")
-#             continue
-
-#         if headers.get(h):
-#             headers_comment.append("present")
-#         else:
-#             missing_headers.append(h)
-#             headers_comment.append("absent")
-
-#     return missing_headers, headers_comment
 from __future__ import annotations
 from constants import GOOD_REFERRER, WEAK_REFERRER, CSP_WEAK_TOKENS, SEV_ORDER
-
-
 import re
 from typing import Any, Mapping
 
-
+# ===============================================================
+# FUNCTION : _lower_sev(sev)
+# ===============================================================
 def _lower_sev(sev: str) -> str:
-    # baisse d’un cran (high->medium->low->info)
+    """
+    Compute the next lower severity level.
+
+    Returns : 
+        str : lower security level
+    """
     inv = {v: k for k, v in SEV_ORDER.items()}
     v = SEV_ORDER.get(sev, 0)
     return inv.get(max(0, v - 1), "info")
 
+
+# ===============================================================
+# FUNCTION : _get_header
+# ===============================================================
 def _get_header(headers: Mapping[str, Any], name: str) -> str | None:
+    """
+    Return a normalized header value or None if missing/empty.
+
+    Returns:
+        str : normalized header value or None 
+    """
     v = headers.get(name)
     return str(v).strip() if v is not None and str(v).strip() else None
 
+
+# ===============================================================
+# FUNCTION : _parse_directives
+# ===============================================================
 def _parse_directives(header_value: str) -> dict[str, str]:
+    """
+    Parse a semicolon-separated header into directive/value pairs.
+
+    Returns:
+        dict[str, str]: Mapping of directives to their values.
+    """
     directives: dict[str, str] = {}
     for part in header_value.split(";"):
         part = part.strip()
@@ -66,21 +58,33 @@ def _parse_directives(header_value: str) -> dict[str, str]:
             directives[part] = ""
     return directives
 
+# ===============================================================
+# FUNCTION : scan_security_headers()
+# ===============================================================
 def scan_security_headers(
     headers: Mapping[str, Any],
     required_headers: dict[str, str],  # header -> expected severity if missing
-):
-    """
-    Retour:
-      missing_headers: list[str]
-      findings: list[dict] avec header/status/severity/issue/recommendation/value
+    ) -> tuple[list[str], list[dict[str, str | None]]]:
+    """ 
+    Analyze HTTP security headers and report missing, weak, or invalid configurations.
+
+    Returns:
+        tuple[list[str], list[dict]]: 
+            - Missing header names
+            - Detailed findings (header, status, severity, issue, recommendation, value)
     """
     findings: list[dict[str, Any]] = []
 
     def expected(header: str) -> str:
+        """ 
+        Return expected severity for a missing header
+        """
         return required_headers.get(header, "info")
 
     def add(header: str, status: str, severity: str, issue: str, rec: str, value: str | None):
+        """ 
+        Append a structured finding entry 
+        """
         findings.append({
             "header": header,
             "status": status,          # ok / missing / weak / invalid / info
@@ -90,7 +94,7 @@ def scan_security_headers(
             "value": value,
         })
 
-    # ---- HSTS ----
+    # ------------------- HSTS ---------------------
     if "Strict-Transport-Security" in required_headers:
         hsts = _get_header(headers, "Strict-Transport-Security")
         if not hsts:
@@ -144,7 +148,7 @@ def scan_security_headers(
                     hsts,
                 )
 
-    # ---- CSP (ou Report-Only) ----
+    # ------------ CSP (or Report-Only) ------------
     if "Content-Security-Policy" in required_headers:
         csp = _get_header(headers, "Content-Security-Policy")
         csp_ro = _get_header(headers, "Content-Security-Policy-Report-Only")
@@ -212,7 +216,7 @@ def scan_security_headers(
                         active_value,
                     )
 
-    # ---- X-Frame-Options ----
+    # -------------- X-FRAME-OPTIONS ---------------
     if "X-Frame-Options" in required_headers:
         xfo = _get_header(headers, "X-Frame-Options")
         if not xfo:
@@ -238,7 +242,7 @@ def scan_security_headers(
                     xfo,
                 )
 
-    # ---- X-Content-Type-Options ----
+    # ----------- X-CONTENT-TYPE-OPTIONS -----------
     if "X-Content-Type-Options" in required_headers:
         xcto = _get_header(headers, "X-Content-Type-Options")
         if not xcto:
@@ -263,7 +267,7 @@ def scan_security_headers(
                     xcto,
                 )
 
-    # ---- Referrer-Policy ----
+    # -------------- REFERRER-POLICY ---------------
     if "Referrer-Policy" in required_headers:
         rp = _get_header(headers, "Referrer-Policy")
         if not rp:
@@ -298,7 +302,7 @@ def scan_security_headers(
                     rp,
                 )
 
-    # ---- Permissions-Policy ----
+    # ------------- PERMISSIONS-POLICY -------------
     if "Permissions-Policy" in required_headers:
         pp = _get_header(headers, "Permissions-Policy")
         if not pp:
@@ -322,7 +326,6 @@ def scan_security_headers(
                     pp,
                 )
             else:
-                # check simple: est-ce qu'on mentionne explicitement des features sensibles
                 sensitive = ["geolocation", "camera", "microphone"]
                 missing_sens = [f for f in sensitive if f not in lc]
                 if missing_sens:

@@ -5,10 +5,6 @@ def init_http_result(input_url: str, normalized_url: str) -> dict:
     """
     Initialize and return the default result dictionary used for HTTP security analysis.
 
-    Args:
-        input_url (str): The original URL provided by the user.
-        normalized_url (str): The normalized version of the input URL.
-
     Returns:
         dict: A pre-structured dictionary containing all fields required
             for the HTTP analysis workflow, initialized with default values.

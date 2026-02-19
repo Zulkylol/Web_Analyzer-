@@ -9,16 +9,16 @@ def display_ssl_tls(result, ssl_table):
     def add(p, v, c="", com=""):
         ssl_table.insert("", "end", values=(p, v, c, com))
 
+    # ------------------- ALIAS -------------------------
     cert = result["certificate"]
     tls = result["tls"]
     trust = result["trust"]
 
-    # --- Common name ----
+    # ---------------- COMMON NAME ----------------------
     add("Nom", cert["subject"]["common_name"])
 
-    # --- SAN(s) ----
+    # ------------------- SANs --------------------------
     san = cert["subject"]["san_dns"]
-
     if san:
         add("Subject Alternative Name", san[0], ck(result["hostname_check"]["match"]),
             SPACER + result["hostname_check"]["comment"])
@@ -28,11 +28,11 @@ def display_ssl_tls(result, ssl_table):
         add("Subject Alternative Name", "Aucun SAN", STATUS_ICON["missing"],
             SPACER + "Extension SAN absente (certificat legacy / config atypique)")
 
-    # --- SAN number ---
+    # ---------------- SANs NUMBER ----------------------
     add("Nombre de SAN", len(san), ck(result["hostname_check"]["ok"]),
         SPACER + result["hostname_check"]["warnings"]["multi_domain"])
 
-    # --- Certificat validity ---
+    # --------------- CERTIFICAT VALIDITY ---------------
     add("Début de validité", cert["validity"]["not_before"],
         ck(cert["validity"]["is_valid_now"]),
         SPACER + ("Certificat valide" if cert["validity"]["is_valid_now"] else "Certificat expiré"))
@@ -41,64 +41,64 @@ def display_ssl_tls(result, ssl_table):
         ck(cert["validity"]["expires_ok"]),
         SPACER + cert["validity"]["expires_soon_comment"])
 
-    # --- Certificat version ---
+    # --------------- CERTIFICAT VERSION ----------------
     add("Version du certificat", cert["version"]["id"],
         ck(cert["version"]["ok"]),
         SPACER + cert["version"]["comment"])
 
-    # --- Certificat serial num ---
+    # ---------------- CERTIFICAT SERIAL ----------------
     add("Serial number", cert["serial"]["hex"],
         ck(cert["serial"]["ok"]),
         SPACER + cert["serial"]["comment"])
 
-    # --- Certificat hash algorithm ---
+    # -------------- CERTIFICAT HASH ALGO ---------------
     add("Algorithme", cert["signature"]["hash_algorithm"],
         ck(cert["signature"]["ok"]),
         SPACER + cert["signature"]["comment"])
 
-    # --- Fingerprint ---
+    # ------------------- FINGERPRINT -------------------
     add("Empreinte", cert["signature"]["fingerprint_sha256"], STATUS_ICON["info"])
 
-    # --- Authority ---
+    # -------------------- AUTHORITY --------------------
     add("Autorité certifiante", cert["issuer"]["common_name"],
         ck(trust["is_trusted"]),
         SPACER + ("Autorité reconnue" if trust["is_trusted"] else "Autorité non reconnue"))
 
-    # --- Auto-signed ---
+    # ------------------- AUTO-SIGNED -------------------
     add("Auto-signé", trust["is_self_signed"],
         "✖" if trust["is_self_signed"] else STATUS_ICON["ok"],
         SPACER + ("Certificat autosigné" if trust["is_self_signed"] else "Certificat non autosigné"))
 
-    # --- Public Key ---
+    # ------------------- PUBLIC KEY --------------------
     add("Clé publique", cert["public_key"].get("summary", ""),
         ck(cert["public_key"]["ok"]),
         SPACER + cert["public_key"]["comment"])
 
-    # --- Extensions (basic constraint) ---
+    # ------------- EXT : BASIC CONSTRAINTS -------------
     add("Basic constraints", cert["extensions"]["basic_constraints"],
         ck(cert["extensions"]["basic_constraints_ok"]),
         SPACER + cert["extensions"]["basic_constraints_comment"])
     
-    # --- Extensions (EKU) ---
+    # ---------------- EXT : EXTENDED KU ----------------
     add("KU étendu", cert["extensions"]["extended_key_usage"],
         ck(cert["extensions"]["eku_ok"]),
         SPACER + cert["extensions"]["eku_comment"])
 
-    # --- Extensions (KU) ---
+    # ----------------- EXT : KEY USAGE -----------------
     add("Key usage (KU)", cert["extensions"]["key_usage"],
         ck(cert["extensions"]["ku_ok"]),
         SPACER + cert["extensions"]["ku_comment"])
 
-    # --- Extensions (CRL) ---
+    # -------------------- EXT : CRL --------------------
     add("Liste de révocation", cert["extensions"]["crl_distribution_points"],
         ck(cert["extensions"]["crl_ok"]),
         SPACER + cert["extensions"]["crl_comment"])
 
-    # --- TLS actual version ---
+    # ------------------- TLS VERSION -------------------
     add("Version TLS", tls["negotiated_version"], ck(tls["nv_ok"]),
         SPACER + tls["nv_comment"])
 
-    # --- TLS supported version ---
+    # ----------------- TLS SUPPORTED V -----------------
     if tls["supported_versions"]:
         s = tls["supported_versions"]
         for v in ["TLS1.0", "TLS1.1", "TLS1.2", "TLS1.3"]:
@@ -118,18 +118,18 @@ def display_ssl_tls(result, ssl_table):
                 )
             )
 
-    # --- TLS policy ---
+    # ------------------- TLS POLICY --------------------
     add("Politique TLS",
         "OK" if tls["policy"]["ok"] else "KO",
         ck(tls["policy"]["ok"]),
         SPACER + tls["policy"]["comment"])
 
-    # --- Cipher Suite ---
+    # ------------------ CIPHER SUITE -------------------
     add("Cipher Suite", tls["cipher"]["name"], ck(tls["cipher"]["ok"]),
         SPACER + tls["cipher"]["comment"])
     add("Taille de clé (bits)", tls["cipher"]["bits"], STATUS_ICON["info"])
 
-    # --- Weak cipher legacy (TLS ≤ 1.2) ---
+    # ------------------ WEAK CIPHERS -------------------
     add(
         "Ciphers faibles (legacy)",
         "OK" if tls.get("weak_cipher_ok") else "Faible" if tls.get("weak_cipher_ok") is False else "Non testé",

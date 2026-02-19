@@ -80,11 +80,6 @@ def scan_http_config(url: str) -> dict:
         result["time_ok"], result["time_comment"] = evaluate_response_time(result["time"])
         
         # ----- SECURITY HEADER ANALYSIS -----
-        # result["missing_headers"], result["headers_comment"] = scan_security_headers
-        # (
-        #     response.headers,
-        #     SECURITY_HEADERS,
-        # )
         result["missing_headers"], result["header_findings"] = scan_security_headers(
             response.headers,
             SECURITY_HEADERS,

@@ -18,10 +18,8 @@ def scan_redirections(response, original_url: str) -> dict:
     Raises:
         
     """
-    # =========================================================
-    # 1)------------------ INITIALIZATION ---------------------
-    # =========================================================
-
+   
+    # ------------------ INITIALIZATION ---------------------
     history = response.history or []
     result = {
         "num_redirects": len(history),
@@ -34,9 +32,7 @@ def scan_redirections(response, original_url: str) -> dict:
         "risk": "Low",
     }
 
-    # =========================================================
-    # 2)----------- STORE REDIRECT DOMAINS/IPS ----------------
-    # =========================================================
+    # ----------- STORE REDIRECT DOMAINS/IPS ----------------
     if not history:
         result["num_comment"] = "Aucune redirection"
         return result
@@ -57,9 +53,7 @@ def scan_redirections(response, original_url: str) -> dict:
                 pass
 
 
-    # =========================================================
-    # 3)--------------- REDIRECTIONS VOLUME -------------------
-    # =========================================================
+    # --------------- REDIRECTIONS VOLUME -------------------
     if len(history) > 6:
         result["risk"] = "High"
         result["num_comment"] = "Nombre excessif de redirections !"
@@ -73,9 +67,7 @@ def scan_redirections(response, original_url: str) -> dict:
         result["num_ok"] = True
     
 
-    # =========================================================
-    # 4)--------------- SWITCHING DOMAIN/IP -------------------
-    # =========================================================
+    # --------------- SWITCHING DOMAIN/IP -------------------
     if initial_domain:
         for dom in result["redirect_domains"]:
             if dom != initial_domain and dom not in result["redirect_ips"]:
