@@ -6,6 +6,6 @@
 ## Guillaume Genoud
 ## guillaume.genoud@protonmail.com
 
-## Descritpion 
+## Descritpion
 ### Web_Analyzer-
 Python software that scan website vulnerabilites and generates a PDF report 

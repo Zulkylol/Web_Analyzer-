@@ -8,10 +8,6 @@ def scan_redirections(response, original_url: str) -> dict:
     """
     Checks the redirects performed by the web server
 
-    Args:
-        response (Response) : response of the request sent in check_http_config()
-        original_url (str): URL provided by the user
-
     Returns:
         dict : dictionary that stores the analysis results of redirections
 

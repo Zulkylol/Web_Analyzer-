@@ -71,7 +71,6 @@ def display_http(result, http_table):
                 param = "URL mixte" if i == 1 else ""
                 add_row(param, url_m, STATUS_ICON["warning"], origin)
 
-
     # ---------------- SECURITY HEADERS----------------------
     if result.get("header_findings"):
         for i, f in enumerate(result["header_findings"], start=1):
