@@ -1,3 +1,8 @@
+# main.py
+
+# ===============================================================
+# IMPORTS
+# ===============================================================
 import threading
 import time
 import ttkbootstrap as ttk
@@ -10,7 +15,6 @@ from ui.tables import create_result_table, clear_tables
 from ui.display_http import display_http
 from ui.display_tls import display_ssl_tls
 from ui.display_cookies import display_cookies
-
 
 
 # ===============================================================

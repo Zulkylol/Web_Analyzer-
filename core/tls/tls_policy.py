@@ -1,12 +1,31 @@
 # core/tls/tls_policy.py
+
+# ===============================================================
+# IMPORTS
+# ===============================================================
 from __future__ import annotations
-
 import ssl
-
 from utils.tls import server_supports_tls_version
 
-
+# ===============================================================
+# FUNCTION : analyze_tls_versions_and_policy()
+# ===============================================================
 def analyze_tls_versions_and_policy(result: dict, url: str) -> None:
+    """
+    Evaluate negotiated TLS version and server protocol support.
+
+    Assesses the security of the negotiated version and checks whether
+    legacy versions (TLS 1.0/1.1) are still supported.
+
+    Updates result["tls"] in place with:
+        - negotiated version evaluation (nv_ok/comment)
+        - supported_versions map
+        - policy assessment (ok/comment)
+
+    Args:
+        result (dict): Analysis dictionary to update.
+        url (str): Target URL used for version probing.
+    """
     tls = result["tls"]
     tls_policy = tls["policy"]
 

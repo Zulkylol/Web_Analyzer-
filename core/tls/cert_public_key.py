@@ -1,11 +1,32 @@
 # core/tls/cert_public_key.py
-from __future__ import annotations
 
+# ===============================================================
+# IMPORTS
+# ===============================================================
+from __future__ import annotations
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 
-
+# ===============================================================
+# FUNCTION : analyze_public_key()
+# ===============================================================
 def analyze_public_key(result: dict, x509_cert: x509.Certificate) -> None:
+    """
+    Analyze the certificate public key and assess its strength for TLS usage.
+
+    Extracts key type, size, curve (if EC), PEM encoding, and generates validation flags/comments 
+    based on common security recommendations (e.g., RSA key length, accepted EC curves, DSA deprecation).
+
+    Updates result["certificate"]["public_key"] in place with:
+        - type, size, curve, pem
+        - ok (bool | None)
+        - comment (str)
+        - summary (str)
+
+    Args:
+        result (dict): Analysis dictionary to update.
+        x509_cert (x509.Certificate): Parsed certificate object.
+    """
     cert_public_key = result["certificate"]["public_key"]
 
     try:

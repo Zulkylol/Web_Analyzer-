@@ -1,11 +1,15 @@
 # core/tls/tls_ciphers.py
+
+# ===============================================================
+# IMPORTS
+# ===============================================================
 from __future__ import annotations
-
 import ssl
-
 from utils.tls import server_accepts_cipher
 
-
+# ===============================================================
+# FUNCTION : analyze_cipher_and_weak_ciphers()
+# ===============================================================
 def analyze_cipher_and_weak_ciphers(result: dict, hostname: str, port: int) -> None:
     tls = result["tls"]
     tls_cipher = tls["cipher"]

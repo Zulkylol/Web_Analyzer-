@@ -1,3 +1,8 @@
+# ui/display_tls.py
+
+# ===============================================================
+# IMPORTS
+# ===============================================================
 from constants import SPACER, STATUS_ICON
 from utils.url import ck
 

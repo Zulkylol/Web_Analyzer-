@@ -1,11 +1,27 @@
 # core/tls/cert_identity.py
-from __future__ import annotations
 
+# ===============================================================
+# IMPORTS
+# ===============================================================
+from __future__ import annotations
 from cryptography import x509
 from cryptography.x509.oid import NameOID
 
-
+# ===============================================================
+# FUNCTION : analyze_identity()
+# ===============================================================
 def analyze_identity(result: dict, x509_cert: x509.Certificate, hostname_for_match: str) -> None:
+    """
+    Extract certificate identity (CN/SAN) and check if it matches the given hostname.
+
+    Updates result["certificate"]["subject"], result["certificate"]["issuer"], and
+    result["hostname_check"] in place (match/comment + multi-domain warning).
+
+    Args:
+        result (dict): Analysis dictionary to update.
+        x509_cert (x509.Certificate): Parsed certificate object.
+        hostname_for_match (str): Hostname to validate against CN/SAN (supports wildcards).
+    """
     cert = result["certificate"]
     cert_subject = cert["subject"]
     cert_issuer = cert["issuer"]

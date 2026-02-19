@@ -1,3 +1,8 @@
+# core/http/urls.py
+
+# ===============================================================
+# IMPORTS
+# ===============================================================
 from urllib.parse import urlparse
 from urllib.parse import urlparse
 

@@ -1,3 +1,8 @@
+# ui/display_http.py
+
+# ===============================================================
+# IMPORTS
+# ===============================================================
 from constants import SPACER, STATUS_ICON
 from utils.url import ck
 

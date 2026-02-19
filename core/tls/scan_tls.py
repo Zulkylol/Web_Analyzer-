@@ -1,4 +1,8 @@
 # core/tls/scan_tls.py
+
+# ===============================================================
+# IMPORTS
+# ===============================================================
 from __future__ import annotations
 
 from urllib.parse import urlparse
@@ -8,7 +12,7 @@ from cryptography.hazmat.backends import default_backend
 
 from utils.url import normalize_url
 
-from core.tls.network import fetch_tls_artifacts
+from utils.tls import fetch_tls_artifacts
 from core.tls.trust import analyze_trust
 from core.tls.cert_identity import analyze_identity
 from core.tls.cert_validity import analyze_validity
@@ -18,10 +22,25 @@ from core.tls.cert_extensions import analyze_extensions
 from core.tls.tls_policy import analyze_tls_versions_and_policy
 from core.tls.tls_ciphers import analyze_cipher_and_weak_ciphers
 from core.tls.result import init_tls_result
-from utils.url import normalize_url
 
+
+# ===============================================================
+# FUNCTION : scan_tls_config()
+# ===============================================================
 def scan_tls_config(url: str) -> dict:
+    """
+    Perform a full TLS scan of a URL.
 
+    Normalizes the URL, retrieves TLS artifacts (certificate, version,
+    cipher), parses the X.509 certificate, and runs identity, validity,
+    metadata, public key, extension, trust, and TLS policy checks.
+
+    Args:
+        url (str): Target URL to scan.
+
+    Returns:
+        dict: Structured TLS analysis result.
+    """
 
     # 0) URL normalization
     url = normalize_url(url)

@@ -1,6 +1,15 @@
-import ssl, socket
-import certifi
+# utils/tls.py
+
+# ===============================================================
+# IMPORTS
+# ===============================================================
+from __future__ import annotations
+import socket
+import ssl
+from dataclasses import dataclass
+from typing import Optional, Tuple
 from urllib.parse import urlparse
+import certifi
 
 
 # ===============================================================
@@ -118,3 +127,55 @@ def server_accepts_cipher(hostname, port, tls_version, cipher_string):
         return False 
     except Exception:
         return False
+
+@dataclass
+class TLSArtifacts:
+    der_cert: Optional[bytes]
+    negotiated_version: str
+    cipher_tuple: Optional[Tuple[str, str, int]]
+    error: str = ""
+
+# ===============================================================
+# FUNCTION : fetch_tls_artifacts()
+# ===============================================================
+def fetch_tls_artifacts(hostname: str, port: int, timeout: int = 5) -> TLSArtifacts:
+    """
+    Connect to a server over TLS and retrieve its certificate and session details.
+
+    Returns DER certificate, negotiated TLS version, and cipher suite,
+    or an error inside a TLSArtifacts object.
+
+    Args:
+        hostname (str): Target host.
+        port (int): Target port.
+        timeout (int): Connection timeout (seconds).
+
+    Returns:
+        TLSArtifacts
+    """
+    der_cert = None
+    negotiated_version = ""
+    cipher_tuple = None
+
+    try:
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+
+        with socket.create_connection((hostname, port), timeout=timeout) as sock:
+            with context.wrap_socket(sock, server_hostname=hostname) as ssock:
+                negotiated_version = ssock.version() or ""
+                cipher_tuple = ssock.cipher()
+                der_cert = ssock.getpeercert(binary_form=True)
+
+    except (socket.timeout, TimeoutError) as e:
+        return TLSArtifacts(None, "", None, f"Timeout connexion/handshake: {e}")
+    except ssl.SSLError as e:
+        return TLSArtifacts(None, "", None, f"Erreur TLS/SSL: {e}")
+    except OSError as e:
+        return TLSArtifacts(None, "", None, f"Erreur réseau (OS): {e}")
+
+    if not der_cert:
+        return TLSArtifacts(None, negotiated_version, cipher_tuple, "Impossible de récupérer le certificat serveur.")
+
+    return TLSArtifacts(der_cert, negotiated_version, cipher_tuple)

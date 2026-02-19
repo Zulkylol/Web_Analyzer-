@@ -1,11 +1,26 @@
 # core/tls/cert_validity.py
-from __future__ import annotations
 
+# ===============================================================
+# IMPORTS
+# ===============================================================
+from __future__ import annotations
 from datetime import datetime, timezone
 from cryptography import x509
 
-
+# ===============================================================
+# FUNCTION : analyze_validity()
+# ===============================================================
 def analyze_validity(result: dict, x509_cert: x509.Certificate) -> None:
+    """
+    Check certificate validity dates and expiration status.
+
+    Updates result["certificate"]["validity"] in place with current
+    validity state and remaining lifetime evaluation.
+
+    Args:
+        result (dict): Analysis dictionary to update.
+        x509_cert (x509.Certificate): Parsed certificate.
+    """
     cert_validity = result["certificate"]["validity"]
 
     cert_validity["not_before"] = x509_cert.not_valid_before_utc.isoformat()

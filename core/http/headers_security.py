@@ -1,7 +1,8 @@
+# core/http/headers_security.py
+
 # ===============================================================
 # IMPORTS
 # ===============================================================
-
 from __future__ import annotations
 from constants import GOOD_REFERRER, WEAK_REFERRER, CSP_WEAK_TOKENS, SEV_ORDER
 import re
@@ -102,7 +103,7 @@ def scan_security_headers(
                 "Strict-Transport-Security",
                 "missing",
                 expected("Strict-Transport-Security"),
-                "HSTS absent: risque de downgrade HTTP / SSL stripping.",
+                "HSTS absent: risque de downgrade HTTP / SSL stripping",
                 "Ajouter: Strict-Transport-Security: max-age=31536000; includeSubDomains",
                 None,
             )
@@ -116,8 +117,8 @@ def scan_security_headers(
                     "Strict-Transport-Security",
                     "invalid",
                     _lower_sev(expected("Strict-Transport-Security")),
-                    "HSTS présent mais max-age manquant/illisible.",
-                    "Définir: max-age>=15552000 (180j), idéal 31536000; includeSubDomains recommandé.",
+                    "HSTS présent mais max-age manquant/illisible",
+                    "Définir: max-age>=15552000 (180j), idéal 31536000; includeSubDomains recommandé",
                     hsts,
                 )
             elif max_age < 15552000:
@@ -125,8 +126,8 @@ def scan_security_headers(
                     "Strict-Transport-Security",
                     "weak",
                     _lower_sev(expected("Strict-Transport-Security")),
-                    f"HSTS max-age trop faible ({max_age}).",
-                    "Mettre max-age>=15552000 (180j), idéal 31536000; includeSubDomains recommandé.",
+                    f"HSTS max-age trop faible ({max_age})",
+                    "Mettre max-age>=15552000 (180j), idéal 31536000; includeSubDomains recommandé",
                     hsts,
                 )
             elif not has_include:
@@ -134,8 +135,8 @@ def scan_security_headers(
                     "Strict-Transport-Security",
                     "weak",
                     "low",
-                    "HSTS sans includeSubDomains.",
-                    "Ajouter includeSubDomains si possible (attention aux sous-domaines non-HTTPS).",
+                    "HSTS sans includeSubDomains",
+                    "Ajouter includeSubDomains si possible (attention aux sous-domaines non-HTTPS)",
                     hsts,
                 )
             else:
@@ -143,7 +144,7 @@ def scan_security_headers(
                     "Strict-Transport-Security",
                     "ok",
                     "info",
-                    "HSTS correctement configuré (checks de base OK).",
+                    "HSTS correctement configuré (checks de base OK)",
                     "",
                     hsts,
                 )
@@ -158,8 +159,8 @@ def scan_security_headers(
                 "Content-Security-Policy",
                 "missing",
                 expected("Content-Security-Policy"),
-                "CSP absente: surface XSS plus grande.",
-                "Ajouter une CSP (même minimale) et l’endurcir progressivement.",
+                "CSP absente: surface XSS plus grande",
+                "Ajouter une CSP (même minimale) et l’endurcir progressivement",
                 None,
             )
         else:
@@ -174,8 +175,8 @@ def scan_security_headers(
                     "Content-Security-Policy",
                     "weak",
                     _lower_sev(expected("Content-Security-Policy")),
-                    "CSP contient unsafe-inline et/ou unsafe-eval.",
-                    "Éviter unsafe-inline/unsafe-eval; utiliser nonces/hashes pour scripts/styles.",
+                    "CSP contient unsafe-inline et/ou unsafe-eval",
+                    "Éviter unsafe-inline/unsafe-eval; utiliser nonces/hashes pour scripts/styles",
                     active_value,
                 )
             elif "default-src" not in directives:
@@ -183,7 +184,7 @@ def scan_security_headers(
                     "Content-Security-Policy",
                     "weak",
                     "low",
-                    "CSP sans default-src (souvent incomplète).",
+                    "CSP sans default-src (souvent incomplète)",
                     "Ajouter default-src 'self' puis affiner script-src/style-src/img-src…",
                     active_value,
                 )
@@ -192,7 +193,7 @@ def scan_security_headers(
                     "Content-Security-Policy",
                     "weak",
                     "low",
-                    "CSP sans object-src 'none' (plugins).",
+                    "CSP sans object-src 'none' (plugins)",
                     "Ajouter: object-src 'none'.",
                     active_value,
                 )
@@ -202,8 +203,8 @@ def scan_security_headers(
                         "Content-Security-Policy",
                         "info",
                         "info",
-                        "CSP en mode Report-Only (ne bloque pas).",
-                        "Passer en Content-Security-Policy (enforcement) quand prêt.",
+                        "CSP en mode Report-Only (ne bloque pas)",
+                        "Passer en Content-Security-Policy (enforcement) quand prêt",
                         active_value,
                     )
                 else:
@@ -211,7 +212,7 @@ def scan_security_headers(
                         "Content-Security-Policy",
                         "ok",
                         "info",
-                        "CSP présente et raisonnable (checks de base OK).",
+                        "CSP présente et raisonnable (checks de base OK)",
                         "",
                         active_value,
                     )
@@ -224,8 +225,8 @@ def scan_security_headers(
                 "X-Frame-Options",
                 "missing",
                 expected("X-Frame-Options"),
-                "Protection clickjacking absente (X-Frame-Options).",
-                "Ajouter: X-Frame-Options: DENY (ou SAMEORIGIN).",
+                "Protection clickjacking absente (X-Frame-Options)",
+                "Ajouter: X-Frame-Options: DENY (ou SAMEORIGIN)",
                 None,
             )
         else:
@@ -238,7 +239,7 @@ def scan_security_headers(
                     "weak",
                     "low",
                     f"Valeur X-Frame-Options non recommandée: {xfo}",
-                    "Utiliser DENY ou SAMEORIGIN (ALLOW-FROM est obsolète).",
+                    "Utiliser DENY ou SAMEORIGIN (ALLOW-FROM est obsolète)",
                     xfo,
                 )
 
@@ -275,8 +276,8 @@ def scan_security_headers(
                 "Referrer-Policy",
                 "missing",
                 expected("Referrer-Policy"),
-                "Referrer-Policy absente (fuites potentielles d’URL).",
-                "Ajouter: Referrer-Policy: strict-origin-when-cross-origin (bon défaut).",
+                "Referrer-Policy absente (fuites potentielles d’URL)",
+                "Ajouter: Referrer-Policy: strict-origin-when-cross-origin (bon défaut)",
                 None,
             )
         else:
@@ -289,7 +290,7 @@ def scan_security_headers(
                     "weak",
                     "low",
                     f"Referrer-Policy faible: {v}",
-                    "Utiliser strict-origin-when-cross-origin ou no-referrer selon besoin.",
+                    "Utiliser strict-origin-when-cross-origin ou no-referrer selon besoin",
                     rp,
                 )
             else:
@@ -298,7 +299,7 @@ def scan_security_headers(
                     "info",
                     "info",
                     f"Referrer-Policy non classée: {v}",
-                    "Vérifier qu’elle correspond à ta politique de confidentialité.",
+                    "Vérifier qu’elle correspond à ta politique de confidentialité",
                     rp,
                 )
 
@@ -310,8 +311,8 @@ def scan_security_headers(
                 "Permissions-Policy",
                 "missing",
                 expected("Permissions-Policy"),
-                "Permissions-Policy absente (durcissement optionnel).",
-                "Optionnel: restreindre camera, microphone, geolocation, etc.",
+                "Permissions-Policy absente (durcissement optionnel)",
+                "Optionnel: restreindre camera, microphone, geolocation, etc",
                 None,
             )
         else:
@@ -321,8 +322,8 @@ def scan_security_headers(
                     "Permissions-Policy",
                     "weak",
                     "low",
-                    "Permissions-Policy semble trop permissive ('*' détecté).",
-                    "Éviter '*'; préférer des allowlists minimales ou '()' pour désactiver.",
+                    "Permissions-Policy semble trop permissive ('*' détecté)",
+                    "Éviter '*'; préférer des allowlists minimales ou '()' pour désactiver",
                     pp,
                 )
             else:
@@ -334,11 +335,11 @@ def scan_security_headers(
                         "info",
                         "info",
                         f"Permissions-Policy présente, mais features sensibles non explicitement mentionnées: {', '.join(missing_sens)}",
-                        "Optionnel: ajouter geolocation=(), camera=(), microphone=() si non nécessaires.",
+                        "Optionnel: ajouter geolocation=(), camera=(), microphone=() si non nécessaires",
                         pp,
                     )
                 else:
-                    add("Permissions-Policy", "ok", "info", "Permissions-Policy présente (OK).", "", pp)
+                    add("Permissions-Policy", "ok", "info", "Permissions-Policy présente (OK)", "", pp)
 
     missing_headers = [f["header"] for f in findings if f["status"] == "missing"]
     return missing_headers, findings

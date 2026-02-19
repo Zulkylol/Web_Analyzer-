@@ -1,3 +1,5 @@
+# http_status_codes.py
+
 HTTP_STATUS_CODES = {
 
     # --- 1xx Information ---

@@ -1,3 +1,8 @@
+# core/http/mixed_content.py
+
+# ===============================================================
+# IMPORTS
+# ===============================================================
 import re
 from urllib.parse import urljoin
 import requests

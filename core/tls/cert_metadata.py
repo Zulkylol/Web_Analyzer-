@@ -1,11 +1,30 @@
 # core/tls/cert_metadata.py
-from __future__ import annotations
 
+# ===============================================================
+# IMPORTS
+# ===============================================================
+from __future__ import annotations
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 
-
+# ===============================================================
+# FUNCTION : analyze_metadata()
+# ===============================================================
 def analyze_metadata(result: dict, x509_cert: x509.Certificate) -> None:
+    """
+    Analyze certificate metadata (version, serial number, and signature).
+
+    Updates result["certificate"] in place with validation flags and comments
+    regarding:
+        - X.509 version (expects v3)
+        - Serial number validity and bit length
+        - Signature hash algorithm strength
+        - SHA-256 fingerprint
+
+    Args:
+        result (dict): Analysis dictionary to update.
+        x509_cert (x509.Certificate): Parsed certificate object.
+    """
     cert = result["certificate"]
     cert_version = cert["version"]
     cert_serial = cert["serial"]

@@ -1,3 +1,5 @@
+# constants.py
+
 SECURITY_HEADERS = {
     "Strict-Transport-Security": "medium",
     "Content-Security-Policy": "high",

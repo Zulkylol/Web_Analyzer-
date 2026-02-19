@@ -1,3 +1,8 @@
+# core/http/response_analysis.py
+
+# ===============================================================
+# IMPORTS
+# ===============================================================
 from http_status_codes import HTTP_STATUS_CODES
 from utils.http import map_http_version
 
