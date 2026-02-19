@@ -7,7 +7,10 @@ from tkinter import messagebox
 from core.http.scan_http import scan_http_config
 from core.tls.scan_tls import scan_tls_config
 from ui.tables import create_result_table, clear_tables
-from ui.display import display_http, display_ssl_tls
+from ui.display_http import display_http
+from ui.display_tls import display_ssl_tls
+from ui.display_cookies import display_cookies
+
 
 
 # ===============================================================
@@ -142,4 +145,5 @@ cookies_table = create_result_table(tables_frame, "Cookies")
 style = ttk.Style()
 style.configure("Treeview", rowheight=18)
 style.configure("Treeview.Heading",font=("Helvetica", 11, "bold"))
+
 root.mainloop()

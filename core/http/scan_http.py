@@ -13,6 +13,7 @@ from core.http.result import init_http_result
 from core.http.response_analysis import evaluate_status, detect_http_version, detect_https, evaluate_response_time
 
 
+
 # ===============================================================
 # FUNCTION : check_http_security()
 # ===============================================================
@@ -30,14 +31,14 @@ def scan_http_config(url: str) -> dict:
         None: All network-related exceptions are caught and handled internally.
     """
     
-    # Manage and store url
+    # ------- STORE AND NORMALIZE URL --------
     raw_url = url
     url = normalize_url(url)
 
-    # Initialization of the result dictionnary 
+    # --------- DICT INITIALIZATION ----------
     result = init_http_result(raw_url, url)
 
-    # Request
+    # ------------ REQUEST ON URL ------------
     try:
         response = requests.get(
             url,
@@ -46,47 +47,50 @@ def scan_http_config(url: str) -> dict:
             allow_redirects=True,
         )
 
-
-        # Get HTTP code and mapping
+        # ------- HTTP CODE + MESSAGE --------
         (
             result["status_code"],
             result["status_message"],
             result["status_ok"],
          ) = evaluate_status(response)
 
-        
-        # Get result of URL analysis 
+        # ---------- URL ANALYSIS ------------
         (
             result["final_url"],
             result["url_ok"],
             result["url_comment"],
             result["url_findings"],
         ) = analyze_url_transition(result["original_url"], response.url)
-
-        # Get result of HTTP version analysis
+        
+        # ------ HTTP VERSION ANALYSIS -------
         (
             result["http_version"],
             result["http_ok"],
             result["http_comment"],
         ) = detect_http_version(result["final_url"], response, httpx)
-
-        # HTTPS
+        
+        # -------------- HTTPS ---------------
         (
             result["uses_https"],
             result["https_comment"],
         ) = detect_https(result["final_url"])
-
-        # Get response time 
+        
+        # ------ RESPONSE TIME ANALYSIS ------
         result["time"] = response.elapsed.total_seconds()
         result["time_ok"], result["time_comment"] = evaluate_response_time(result["time"])
-
-        # Get security header analysis 
-        result["missing_headers"], result["headers_comment"] = scan_security_headers(
+        
+        # ----- SECURITY HEADER ANALYSIS -----
+        # result["missing_headers"], result["headers_comment"] = scan_security_headers
+        # (
+        #     response.headers,
+        #     SECURITY_HEADERS,
+        # )
+        result["missing_headers"], result["header_findings"] = scan_security_headers(
             response.headers,
             SECURITY_HEADERS,
         )
-
-        # Get 
+        
+        # ------ MIXED CONTENT ANALYSIS ------
         (
             result["mixed_content"],
             result["mixed_url"],
@@ -96,28 +100,23 @@ def scan_http_config(url: str) -> dict:
             result["final_url"],
             result["uses_https"],
         )
-    # =========================================================
-    # 9)------------------- REDIRECTIONS ----------------------
-    # =========================================================
+        
+        # ------ REDIRECTIONS ANALYSIS -------
         result["redirects"] = scan_redirections(response, url)
 
-    # =========================================================
-    # 10)----------- EXCEPTIONS MANAGMENT ---------------------
-    # =========================================================
+    # --------- EXCEPTIONS MANAGMENT ---------
     except requests.exceptions.SSLError as e:
         txt = repr(e)
-
         if "CERTIFICATE_VERIFY_FAILED" in txt and "unable to get local issuer certificate" in txt:
             result["comment"] = (
                 "Erreur TLS/SSL : vérification du certificat impossible "
-                "(CA intermédiaire manquante / chaîne incomplète). "
-                "Le navigateur peut réussir via cache, mais Python/OpenSSL échoue."
-            )
+                "(CA intermédiaire manquante / chaîne incomplète) "
+                "Le navigateur peut réussir via cache, mais Python/OpenSSL échoue")
+            
         elif "CERTIFICATE_VERIFY_FAILED" in txt:
             result["comment"] = (
                 "Erreur TLS/SSL : vérification du certificat impossible "
-                "(CERTIFICATE_VERIFY_FAILED)."
-            )
+                "(CERTIFICATE_VERIFY_FAILED)")
         else:
             result["comment"] = f"Erreur TLS/SSL : {e}"
     except requests.exceptions.ConnectTimeout:

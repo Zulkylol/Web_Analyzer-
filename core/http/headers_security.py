@@ -1,37 +1,341 @@
-from constants import SECURITY_HEADERS
 
-def scan_security_headers(headers, required_headers: list[str]):
-    """
-    Analyse les en-têtes de sécurité.
 
-    Args:
-        headers: Mapping/dict-like (ex: response.headers)
-        required_headers (list[str]): Liste des headers attendus.
+# def scan_security_headers(headers, required_headers: list[str]):
+#     """
+#     Analyse les en-têtes de sécurité.
 
-    Returns:
-        tuple[list[str], list[str]]: (missing_headers, headers_comment)
-        headers_comment est aligné avec required_headers ("present"/"absent").
-    """
-    missing_headers: list[str] = []
-    headers_comment: list[str] = []
+#     Args:
+#         headers: Mapping/dict-like (ex: response.headers)
+#         required_headers (list[str]): Liste des headers attendus.
 
-    for h in required_headers:
-        if h == "Content-Security-Policy":
-            csp_value = (
-                headers.get("Content-Security-Policy")
-                or headers.get("Content-Security-Policy-Report-Only")
-            )
-            if csp_value:
-                headers_comment.append("present")
-            else:
-                missing_headers.append(h)
-                headers_comment.append("absent")
+#     Returns:
+#         tuple[list[str], list[str]]: (missing_headers, headers_comment)
+#         headers_comment est aligné avec required_headers ("present"/"absent").
+#     """
+#     missing_headers: list[str] = []
+#     headers_comment: list[str] = []
+
+#     for h in required_headers:
+#         if h == "Content-Security-Policy":
+#             csp_value = (
+#                 headers.get("Content-Security-Policy")
+#                 or headers.get("Content-Security-Policy-Report-Only")
+#             )
+#             if csp_value:
+#                 headers_comment.append("present")
+#             else:
+#                 missing_headers.append(h)
+#                 headers_comment.append("absent")
+#             continue
+
+#         if headers.get(h):
+#             headers_comment.append("present")
+#         else:
+#             missing_headers.append(h)
+#             headers_comment.append("absent")
+
+#     return missing_headers, headers_comment
+from __future__ import annotations
+from constants import GOOD_REFERRER, WEAK_REFERRER, CSP_WEAK_TOKENS, SEV_ORDER
+
+
+import re
+from typing import Any, Mapping
+
+
+def _lower_sev(sev: str) -> str:
+    # baisse d’un cran (high->medium->low->info)
+    inv = {v: k for k, v in SEV_ORDER.items()}
+    v = SEV_ORDER.get(sev, 0)
+    return inv.get(max(0, v - 1), "info")
+
+def _get_header(headers: Mapping[str, Any], name: str) -> str | None:
+    v = headers.get(name)
+    return str(v).strip() if v is not None and str(v).strip() else None
+
+def _parse_directives(header_value: str) -> dict[str, str]:
+    directives: dict[str, str] = {}
+    for part in header_value.split(";"):
+        part = part.strip()
+        if not part:
             continue
-
-        if headers.get(h):
-            headers_comment.append("present")
+        if " " in part:
+            k, rest = part.split(" ", 1)
+            directives[k.strip()] = rest.strip()
         else:
-            missing_headers.append(h)
-            headers_comment.append("absent")
+            directives[part] = ""
+    return directives
 
-    return missing_headers, headers_comment
+def scan_security_headers(
+    headers: Mapping[str, Any],
+    required_headers: dict[str, str],  # header -> expected severity if missing
+):
+    """
+    Retour:
+      missing_headers: list[str]
+      findings: list[dict] avec header/status/severity/issue/recommendation/value
+    """
+    findings: list[dict[str, Any]] = []
+
+    def expected(header: str) -> str:
+        return required_headers.get(header, "info")
+
+    def add(header: str, status: str, severity: str, issue: str, rec: str, value: str | None):
+        findings.append({
+            "header": header,
+            "status": status,          # ok / missing / weak / invalid / info
+            "severity": severity,      # high / medium / low / info
+            "issue": issue,
+            "recommendation": rec,
+            "value": value,
+        })
+
+    # ---- HSTS ----
+    if "Strict-Transport-Security" in required_headers:
+        hsts = _get_header(headers, "Strict-Transport-Security")
+        if not hsts:
+            add(
+                "Strict-Transport-Security",
+                "missing",
+                expected("Strict-Transport-Security"),
+                "HSTS absent: risque de downgrade HTTP / SSL stripping.",
+                "Ajouter: Strict-Transport-Security: max-age=31536000; includeSubDomains",
+                None,
+            )
+        else:
+            m = re.search(r"max-age\s*=\s*(\d+)", hsts, re.I)
+            max_age = int(m.group(1)) if m else None
+            has_include = "includesubdomains" in hsts.lower()
+
+            if max_age is None:
+                add(
+                    "Strict-Transport-Security",
+                    "invalid",
+                    _lower_sev(expected("Strict-Transport-Security")),
+                    "HSTS présent mais max-age manquant/illisible.",
+                    "Définir: max-age>=15552000 (180j), idéal 31536000; includeSubDomains recommandé.",
+                    hsts,
+                )
+            elif max_age < 15552000:
+                add(
+                    "Strict-Transport-Security",
+                    "weak",
+                    _lower_sev(expected("Strict-Transport-Security")),
+                    f"HSTS max-age trop faible ({max_age}).",
+                    "Mettre max-age>=15552000 (180j), idéal 31536000; includeSubDomains recommandé.",
+                    hsts,
+                )
+            elif not has_include:
+                add(
+                    "Strict-Transport-Security",
+                    "weak",
+                    "low",
+                    "HSTS sans includeSubDomains.",
+                    "Ajouter includeSubDomains si possible (attention aux sous-domaines non-HTTPS).",
+                    hsts,
+                )
+            else:
+                add(
+                    "Strict-Transport-Security",
+                    "ok",
+                    "info",
+                    "HSTS correctement configuré (checks de base OK).",
+                    "",
+                    hsts,
+                )
+
+    # ---- CSP (ou Report-Only) ----
+    if "Content-Security-Policy" in required_headers:
+        csp = _get_header(headers, "Content-Security-Policy")
+        csp_ro = _get_header(headers, "Content-Security-Policy-Report-Only")
+
+        if not csp and not csp_ro:
+            add(
+                "Content-Security-Policy",
+                "missing",
+                expected("Content-Security-Policy"),
+                "CSP absente: surface XSS plus grande.",
+                "Ajouter une CSP (même minimale) et l’endurcir progressivement.",
+                None,
+            )
+        else:
+            active_value = csp or csp_ro
+            is_report_only = (csp is None) and (csp_ro is not None)
+
+            directives = _parse_directives(active_value or "")
+            lc = (active_value or "").lower()
+
+            if any(t in lc for t in CSP_WEAK_TOKENS):
+                add(
+                    "Content-Security-Policy",
+                    "weak",
+                    _lower_sev(expected("Content-Security-Policy")),
+                    "CSP contient unsafe-inline et/ou unsafe-eval.",
+                    "Éviter unsafe-inline/unsafe-eval; utiliser nonces/hashes pour scripts/styles.",
+                    active_value,
+                )
+            elif "default-src" not in directives:
+                add(
+                    "Content-Security-Policy",
+                    "weak",
+                    "low",
+                    "CSP sans default-src (souvent incomplète).",
+                    "Ajouter default-src 'self' puis affiner script-src/style-src/img-src…",
+                    active_value,
+                )
+            elif directives.get("object-src", "").strip() not in ("'none'", "none"):
+                add(
+                    "Content-Security-Policy",
+                    "weak",
+                    "low",
+                    "CSP sans object-src 'none' (plugins).",
+                    "Ajouter: object-src 'none'.",
+                    active_value,
+                )
+            else:
+                if is_report_only:
+                    add(
+                        "Content-Security-Policy",
+                        "info",
+                        "info",
+                        "CSP en mode Report-Only (ne bloque pas).",
+                        "Passer en Content-Security-Policy (enforcement) quand prêt.",
+                        active_value,
+                    )
+                else:
+                    add(
+                        "Content-Security-Policy",
+                        "ok",
+                        "info",
+                        "CSP présente et raisonnable (checks de base OK).",
+                        "",
+                        active_value,
+                    )
+
+    # ---- X-Frame-Options ----
+    if "X-Frame-Options" in required_headers:
+        xfo = _get_header(headers, "X-Frame-Options")
+        if not xfo:
+            add(
+                "X-Frame-Options",
+                "missing",
+                expected("X-Frame-Options"),
+                "Protection clickjacking absente (X-Frame-Options).",
+                "Ajouter: X-Frame-Options: DENY (ou SAMEORIGIN).",
+                None,
+            )
+        else:
+            v = xfo.strip().upper()
+            if v in {"DENY", "SAMEORIGIN"}:
+                add("X-Frame-Options", "ok", "info", "X-Frame-Options correct.", "", xfo)
+            else:
+                add(
+                    "X-Frame-Options",
+                    "weak",
+                    "low",
+                    f"Valeur X-Frame-Options non recommandée: {xfo}",
+                    "Utiliser DENY ou SAMEORIGIN (ALLOW-FROM est obsolète).",
+                    xfo,
+                )
+
+    # ---- X-Content-Type-Options ----
+    if "X-Content-Type-Options" in required_headers:
+        xcto = _get_header(headers, "X-Content-Type-Options")
+        if not xcto:
+            add(
+                "X-Content-Type-Options",
+                "missing",
+                expected("X-Content-Type-Options"),
+                "Protection contre MIME sniffing absente.",
+                "Ajouter: X-Content-Type-Options: nosniff",
+                None,
+            )
+        else:
+            if xcto.lower() == "nosniff":
+                add("X-Content-Type-Options", "ok", "info", "nosniff correct.", "", xcto)
+            else:
+                add(
+                    "X-Content-Type-Options",
+                    "weak",
+                    "low",
+                    f"Valeur inattendue: {xcto}",
+                    "Mettre exactement: nosniff",
+                    xcto,
+                )
+
+    # ---- Referrer-Policy ----
+    if "Referrer-Policy" in required_headers:
+        rp = _get_header(headers, "Referrer-Policy")
+        if not rp:
+            add(
+                "Referrer-Policy",
+                "missing",
+                expected("Referrer-Policy"),
+                "Referrer-Policy absente (fuites potentielles d’URL).",
+                "Ajouter: Referrer-Policy: strict-origin-when-cross-origin (bon défaut).",
+                None,
+            )
+        else:
+            v = rp.split(",")[0].strip().lower()
+            if v in GOOD_REFERRER:
+                add("Referrer-Policy", "ok", "info", "Referrer-Policy correcte.", "", rp)
+            elif v in WEAK_REFERRER:
+                add(
+                    "Referrer-Policy",
+                    "weak",
+                    "low",
+                    f"Referrer-Policy faible: {v}",
+                    "Utiliser strict-origin-when-cross-origin ou no-referrer selon besoin.",
+                    rp,
+                )
+            else:
+                add(
+                    "Referrer-Policy",
+                    "info",
+                    "info",
+                    f"Referrer-Policy non classée: {v}",
+                    "Vérifier qu’elle correspond à ta politique de confidentialité.",
+                    rp,
+                )
+
+    # ---- Permissions-Policy ----
+    if "Permissions-Policy" in required_headers:
+        pp = _get_header(headers, "Permissions-Policy")
+        if not pp:
+            add(
+                "Permissions-Policy",
+                "missing",
+                expected("Permissions-Policy"),
+                "Permissions-Policy absente (durcissement optionnel).",
+                "Optionnel: restreindre camera, microphone, geolocation, etc.",
+                None,
+            )
+        else:
+            lc = pp.lower()
+            if "*" in lc:
+                add(
+                    "Permissions-Policy",
+                    "weak",
+                    "low",
+                    "Permissions-Policy semble trop permissive ('*' détecté).",
+                    "Éviter '*'; préférer des allowlists minimales ou '()' pour désactiver.",
+                    pp,
+                )
+            else:
+                # check simple: est-ce qu'on mentionne explicitement des features sensibles
+                sensitive = ["geolocation", "camera", "microphone"]
+                missing_sens = [f for f in sensitive if f not in lc]
+                if missing_sens:
+                    add(
+                        "Permissions-Policy",
+                        "info",
+                        "info",
+                        f"Permissions-Policy présente, mais features sensibles non explicitement mentionnées: {', '.join(missing_sens)}",
+                        "Optionnel: ajouter geolocation=(), camera=(), microphone=() si non nécessaires.",
+                        pp,
+                    )
+                else:
+                    add("Permissions-Policy", "ok", "info", "Permissions-Policy présente (OK).", "", pp)
+
+    missing_headers = [f["header"] for f in findings if f["status"] == "missing"]
+    return missing_headers, findings
