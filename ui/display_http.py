@@ -109,7 +109,39 @@ def display_http(result, http_table):
     if r_ips:
         add_row("IPs de redirection", r_ips[0], STATUS_ICON["warning"], redirects.get("ri_comment", ""))
         for ip in r_ips[1:]:
-            add_row("", ip, STATUS_ICON["warining"], "")
+            add_row("", ip, STATUS_ICON["warning"], "")
+
+    
+    # ---------------- REDIRECT CHAIN (NEW) ----------------
+    r_chain = redirects.get("redirect_chain") or []
+    if r_chain:
+        # Show first hop with label, then continuation rows
+        for i, hop in enumerate(r_chain, start=1):
+            try:
+                hop_url = hop.get("url", "")
+                hop_status = hop.get("status", "")
+            except Exception:
+                hop_url = str(hop)
+                hop_status = ""
+
+            param = "Chaîne de redirections" if i == 1 else ""
+            add_row(param, str(hop_status), STATUS_ICON["info"], hop_url)
+
+    # --------------- HOP FINDINGS (NEW) -------------------
+    hop_findings = redirects.get("hop_findings") or []
+    if hop_findings:
+        for i, f in enumerate(hop_findings, start=1):
+            param = "Analyse par hop" if i == 1 else ""
+            # f may include "message"/"comment"/etc depending on analyze_url_transition()
+            msg = f.get("message") or f.get("comment") or f.get("issue") or str(f)
+            # optional: show from->to if you want
+            src = f.get("from", "")
+            dst = f.get("to", "")
+            detail = f"{src} → {dst}" if src and dst else ""
+
+            add_row(param, "", STATUS_ICON["warning"], msg)
+            if detail:
+                add_row("", "", STATUS_ICON["info"], detail)
 
 
 
