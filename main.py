@@ -11,6 +11,7 @@ from tkinter import messagebox
 
 from core.http.scan_http import scan_http_config
 from core.tls.scan_tls import scan_tls_config
+from core.cookies.scan_cookies import scan_cookies_config
 from ui.tables import create_result_table, clear_tables
 from ui.display_http import display_http
 from ui.display_tls import display_ssl_tls
@@ -54,10 +55,18 @@ def start_scan():
             update_progress(40)
             result_ssl = scan_tls_config(url)
 
-            # Step 3 : Display results
+            # Step 4 Cookies
+            result_cookies = None
+            if cookies_var.get():
+                update_progress(60)
+                result_cookies = scan_cookies_config(url)
+
+            # Step 5 : Display results
             update_progress(80)
             display_http(result_http, http_table)
             display_ssl_tls(result_ssl, ssl_table)
+            if cookies_var.get():
+                display_cookies(result_cookies, cookies_table)
             update_progress(90)
 
             # Final step

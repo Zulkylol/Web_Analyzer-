@@ -1,10 +1,25 @@
 # core/tls/cert_extensions.py
-from __future__ import annotations
 
+# ===============================================================
+# IMPORTS
+# ===============================================================
+from __future__ import annotations
 from cryptography import x509
 
-
+# ===============================================================
+# FUNCTION : analyze_extensions(result, x509_cert)
+# ===============================================================
 def analyze_extensions(result: dict, x509_cert: x509.Certificate) -> None:
+    """
+    Extract and validate common X.509 extensions for a TLS server certificate.
+
+    Updates result["certificate"]["extensions"] in place with string
+    values and basic validation flags/comments.
+
+    Args:
+        result (dict): Analysis dictionary to update.
+        x509_cert (x509.Certificate): Parsed certificate object.
+    """
     cert_ext = result["certificate"]["extensions"]
 
     # dump extensions as string

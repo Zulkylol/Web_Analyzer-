@@ -11,6 +11,23 @@ from utils.tls import server_accepts_cipher
 # FUNCTION : analyze_cipher_and_weak_ciphers()
 # ===============================================================
 def analyze_cipher_and_weak_ciphers(result: dict, hostname: str, port: int) -> None:
+    """
+    Evaluate the negotiated cipher and test support for weak ciphers.
+
+    Assesses cipher strength (algorithm and key size) and checks whether
+    the server still accepts legacy/weak ciphers under TLS ≤ 1.2.
+
+    Updates result["tls"] in place with:
+        - cipher validation (ok/comment)
+        - weak_cipher_support results
+        - weak_cipher_ok (bool)
+        - weak_cipher_comment (str)
+
+    Args:
+        result (dict): Analysis dictionary to update.
+        hostname (str): Target host.
+        port (int): Target port.
+    """
     tls = result["tls"]
     tls_cipher = tls["cipher"]
     support = tls.get("supported_versions", {})
@@ -21,13 +38,13 @@ def analyze_cipher_and_weak_ciphers(result: dict, hostname: str, port: int) -> N
     weak_algorithms = ["RC4", "3DES", "DES", "MD5"]
     if any(w in name for w in weak_algorithms):
         tls_cipher["ok"] = False
-        tls_cipher["comment"] = "Cipher faible détectée (RC4/3DES/DES/MD5)."
+        tls_cipher["comment"] = "Cipher faible détectée (RC4/3DES/DES/MD5)"
     elif bits and bits < 128:
         tls_cipher["ok"] = False
-        tls_cipher["comment"] = "Taille de clé inférieure à 128 bits."
+        tls_cipher["comment"] = "Taille de clé inférieure à 128 bits"
     elif "GCM" in name or "CHACHA20" in name:
         tls_cipher["ok"] = True
-        tls_cipher["comment"] = "Cipher moderne sécurisée (AEAD)."
+        tls_cipher["comment"] = "Cipher moderne sécurisée (AEAD)"
     else:
         tls_cipher["ok"] = True
         tls_cipher["comment"] = "Cipher acceptable."
@@ -35,7 +52,7 @@ def analyze_cipher_and_weak_ciphers(result: dict, hostname: str, port: int) -> N
     # Weak cipher tests
     if not (support.get("TLS1.0") or support.get("TLS1.1") or support.get("TLS1.2")):
         tls["weak_cipher_support"] = {}
-        tls["weak_cipher_comment"] = "Serveur uniquement TLS 1.3 → pas de ciphers legacy testables."
+        tls["weak_cipher_comment"] = "Serveur uniquement TLS 1.3 → pas de ciphers legacy testables"
         return
 
     weak_cipher_tests = {
@@ -58,4 +75,4 @@ def analyze_cipher_and_weak_ciphers(result: dict, hostname: str, port: int) -> N
         tls["weak_cipher_comment"] = f"Le serveur accepte encore : {', '.join(bad)}"
     else:
         tls["weak_cipher_ok"] = True
-        tls["weak_cipher_comment"] = "Aucun cipher faible accepté."
+        tls["weak_cipher_comment"] = "Aucun cipher faible accepté"
