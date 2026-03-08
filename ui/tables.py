@@ -31,7 +31,7 @@ def create_result_table(parent, title):
 
     # -------------------- COLUMNS ---------------------
     columns = ("param", "value", "check", "comment")
-    tree = ttk.Treeview(frame, columns=columns, show="headings", height=10)
+    tree = ttk.Treeview(frame, columns=columns, show="headings", height=14)
     
     # ------------------ COLUMNS NAME ------------------
     tree.heading("param", text="Paramètre")
@@ -40,14 +40,17 @@ def create_result_table(parent, title):
     tree.heading("comment", text="Commentaire")
     
     # ---------------- WIDTH + ALIGNEMENT --------------
-    tree.column("param", width=180, anchor="w", stretch=False)
-    tree.column("value", width=150, anchor="center", stretch=False)
-    tree.column("check", width=30, anchor="center", stretch=False)
-    tree.column("comment", width=200, anchor="w", stretch=True)
+    tree.column("param", width=220, anchor="w", stretch=False)
+    tree.column("value", width=200, anchor="w", stretch=False)
+    tree.column("check", width=60, anchor="center", stretch=False)
+    tree.column("comment", width=900, anchor="w", stretch=True)
 
-    # ---------------- VERTICAL SCROLLBAR --------------
+    # ---------------- SCROLLBARS ----------------------
     scrollbar = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
+    xscroll = ttk.Scrollbar(frame, orient="horizontal", command=tree.xview)
     tree.configure(yscroll=scrollbar.set)
+    tree.configure(xscroll=xscroll.set)
     scrollbar.pack(side="right", fill="y")
+    xscroll.pack(side="bottom", fill="x")
     tree.pack(fill="both", expand=True)
     return tree
