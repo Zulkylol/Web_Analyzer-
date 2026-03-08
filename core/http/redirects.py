@@ -9,6 +9,26 @@ from urllib.parse import urlparse, urljoin
 from core.http.urls import analyze_url_transition  # <-- NEW
 import traceback
 
+
+def _base_domain(hostname: str | None) -> str:
+    """
+    Lightweight base-domain extraction (eTLD+1 approximation).
+    Keeps localhost/IP untouched.
+    """
+    h = (hostname or "").strip().lower().strip(".")
+    if not h:
+        return ""
+    try:
+        ipaddress.ip_address(h)
+        return h
+    except ValueError:
+        pass
+
+    parts = h.split(".")
+    if len(parts) >= 2:
+        return ".".join(parts[-2:])
+    return h
+
 # ===============================================================
 # FUNCTION : scan_redirections()
 # ===============================================================
@@ -44,6 +64,7 @@ def scan_redirections(response, original_url: str) -> dict:
             return result
 
         initial_domain = urlparse(original_url).hostname
+        initial_base_domain = _base_domain(initial_domain)
 
         for resp in history:
             loc = resp.headers.get("Location")
@@ -57,6 +78,10 @@ def scan_redirections(response, original_url: str) -> dict:
                     result["redirect_ips"].append(domain)
                 except ValueError:
                     pass
+
+        # Keep unique order for display clarity
+        result["redirect_domains"] = list(dict.fromkeys(result["redirect_domains"]))
+        result["redirect_ips"] = list(dict.fromkeys(result["redirect_ips"]))
 
         # ---------------- BUILD REDIRECT CHAIN -----------------
         # Ordered hops (from Location resolution) + final response URL
@@ -158,7 +183,7 @@ def scan_redirections(response, original_url: str) -> dict:
         # --------------- SWITCHING DOMAIN/IP -------------------
         if initial_domain:
             for dom in result["redirect_domains"]:
-                if dom != initial_domain and dom not in result["redirect_ips"]:
+                if _base_domain(dom) != initial_base_domain and dom not in result["redirect_ips"]:
                     result["rd_comment"] = f"Redirection vers un autre domaine ({dom})."
                     if result["risk"] == "Low":
                         result["risk"] = "Medium"

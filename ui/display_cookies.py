@@ -1,4 +1,4 @@
-# ui/display_cookies.py
+﻿# ui/display_cookies.py
 
 # ===============================================================
 # IMPORTS
@@ -11,8 +11,13 @@ from utils.url import ck
 # FUNCTION : display_cookies()
 # ===============================================================
 def display_cookies(result, cookies_table):
-    def add_row(param, value="", check=STATUS_ICON["info"], comment=""):
-        cookies_table.insert("", "end", values=(param, value, check, comment))
+    row_idx = 0
+
+    def add_row(param, value="", check=STATUS_ICON["info"], comment="", risk=""):
+        nonlocal row_idx
+        zebra_tag = "zebra_even" if row_idx % 2 == 0 else "zebra_odd"
+        cookies_table.insert("", "end", values=(param, value, check, risk, comment), tags=(zebra_tag,))
+        row_idx += 1
 
     def yn(flag):
         return "oui" if bool(flag) else "non"
@@ -76,9 +81,9 @@ def display_cookies(result, cookies_table):
             rec = finding.get("recommendation", "")
             icon = status_icon.get(str(finding.get("status", "warning")).lower(), STATUS_ICON["warning"])
 
-            add_row(param, cookie_name, icon, f"{rule} ({sev}) : {issue}")
+            add_row(param, cookie_name, icon, f"{rule} ({sev}) : {issue}", risk=sev)
             if rec:
-                add_row("", "↳ Recommandation", STATUS_ICON["info"], SPACER + rec)
+                add_row("", "↳ Recommandation", STATUS_ICON["info"], SPACER + rec, risk="INFO")
     else:
         add_row("Findings cookies", "-", STATUS_ICON["ok"], "Aucun probleme de configuration cookie detecte.")
 
@@ -111,3 +116,4 @@ def display_cookies(result, cookies_table):
             add_row("", f"Type: {persistence_txt}", STATUS_ICON["info"], "")
             add_row("", f"Taille: {size_txt} octets", STATUS_ICON["info"], "")
             add_row("", f"Source: {source}", STATUS_ICON["info"], "")
+

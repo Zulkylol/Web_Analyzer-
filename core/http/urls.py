@@ -9,13 +9,13 @@ from urllib.parse import urlparse
 # ===============================================================
 # FUNCTION : analyze_url_transistion(original_url, final_url)
 # ===============================================================
-def analyze_url_transition(original_url: str, final_url: str) -> tuple[str, bool | None, str, list[str]]:
+def analyze_url_transition(original_url: str, final_url: str) -> tuple[str, bool | None, str, list[str], str]:
     """
     Analyze the transition between the original URL and the final URL.
 
     Returns:
-        tuple[str, bool | None, str, list[str]]:
-            (final_url, url_ok, url_comment, url_findings)
+        tuple[str, bool | None, str, list[str], str]:
+            (final_url, url_ok, url_comment, url_findings, url_risk)
     """
 
     original_parsed = urlparse(original_url)
@@ -56,6 +56,7 @@ def analyze_url_transition(original_url: str, final_url: str) -> tuple[str, bool
     url_ok = True
     url_comment = "OK"
     url_findings = []
+    url_risk = "INFO"
 
     # If issues founds 
     if findings:
@@ -70,4 +71,24 @@ def analyze_url_transition(original_url: str, final_url: str) -> tuple[str, bool
         url_comment = top["message"]
         url_findings = [f["message"] for f in findings_sorted]
 
-    return final_url, url_ok, url_comment, url_findings
+    # ---------------- URL RISK POLICY ----------------
+    original_scheme = (original_parsed.scheme or "").lower()
+    final_scheme = (final_parsed.scheme or "").lower()
+    host_changed = (
+        bool(original_parsed.hostname)
+        and bool(final_parsed.hostname)
+        and original_parsed.hostname.lower() != final_parsed.hostname.lower()
+    )
+
+    if original_scheme == "https" and final_scheme == "http":
+        url_risk = "HIGH"
+    elif final_scheme == "http":
+        url_risk = "MEDIUM"
+    elif final_scheme == "https" and host_changed:
+        url_risk = "LOW"
+    elif final_scheme == "https":
+        url_risk = "INFO"
+    else:
+        url_risk = "MEDIUM"
+
+    return final_url, url_ok, url_comment, url_findings, url_risk

@@ -10,9 +10,13 @@ from utils.url import ck
 # FUNCTION : display_ssl_tls()
 # ===============================================================
 def display_ssl_tls(result, ssl_table):
+    row_idx = 0
 
-    def add(p, v, c="", com=""):
-        ssl_table.insert("", "end", values=(p, v, c, com))
+    def add(p, v, c="", com="", risk=""):
+        nonlocal row_idx
+        zebra_tag = "zebra_even" if row_idx % 2 == 0 else "zebra_odd"
+        ssl_table.insert("", "end", values=(p, v, c, risk, com), tags=(zebra_tag,))
+        row_idx += 1
 
     # ------------------- ALIAS -------------------------
     cert = result["certificate"]

@@ -15,7 +15,16 @@ from core.http.redirects import scan_redirections
 from core.http.urls import analyze_url_transition
 from core.http.headers_security import scan_security_headers
 from core.http.result import init_http_result
-from core.http.response_analysis import evaluate_status, detect_http_version, detect_https, evaluate_response_time
+from core.http.response_analysis import (
+    evaluate_status,
+    evaluate_status_risk,
+    detect_http_version,
+    evaluate_http_version_risk,
+    evaluate_https_posture,
+    adjust_url_risk_with_https_posture,
+    evaluate_response_time,
+    evaluate_response_time_risk,
+)
 
 
 
@@ -44,10 +53,11 @@ def scan_http_config(url: str) -> dict:
     result = init_http_result(raw_url, url)
 
     # ------------ REQUEST ON URL ------------
+    request_headers = {"User-Agent": "Mozilla/5.0"}
     try:
         response = requests.get(
             url,
-            headers={"User-Agent": "Mozilla/5.0"},
+            headers=request_headers,
             timeout=5,
             allow_redirects=True,
         )
@@ -58,6 +68,7 @@ def scan_http_config(url: str) -> dict:
             result["status_message"],
             result["status_ok"],
          ) = evaluate_status(response)
+        result["status_risk"] = evaluate_status_risk(result["status_code"])
 
         # ---------- URL ANALYSIS ------------
         (
@@ -65,6 +76,7 @@ def scan_http_config(url: str) -> dict:
             result["url_ok"],
             result["url_comment"],
             result["url_findings"],
+            result["url_risk"],
         ) = analyze_url_transition(result["original_url"], response.url)
         
         # ------ HTTP VERSION ANALYSIS -------
@@ -73,16 +85,34 @@ def scan_http_config(url: str) -> dict:
             result["http_ok"],
             result["http_comment"],
         ) = detect_http_version(result["final_url"], response, httpx)
+        result["http_version_risk"] = evaluate_http_version_risk(result["http_version"])
         
         # -------------- HTTPS ---------------
         (
             result["uses_https"],
+            result["https_value"],
             result["https_comment"],
-        ) = detect_https(result["final_url"])
+            result["https_risk"],
+        ) = evaluate_https_posture(
+            original_url=result["original_url"],
+            final_url=result["final_url"],
+            response=response,
+            requests_module=requests,
+            headers=request_headers,
+            timeout=5,
+        )
+
+        result["url_risk"], result["url_comment"] = adjust_url_risk_with_https_posture(
+            url_risk=result.get("url_risk", "MEDIUM"),
+            final_url=result.get("final_url", ""),
+            https_value=result.get("https_value", "Non"),
+            url_comment=result.get("url_comment", ""),
+        )
         
         # ------ RESPONSE TIME ANALYSIS ------
         result["time"] = response.elapsed.total_seconds()
         result["time_ok"], result["time_comment"] = evaluate_response_time(result["time"])
+        result["time_risk"] = evaluate_response_time_risk(result["time"])
         
         # ----- SECURITY HEADER ANALYSIS -----
         result["missing_headers"], result["header_findings"] = scan_security_headers(
@@ -95,6 +125,7 @@ def scan_http_config(url: str) -> dict:
             result["mixed_content"],
             result["mixed_url"],
             result["mixed_comment"],
+            result["mixed_content_level"],
         ) = detect_mixed_content(
             response.text,
             result["final_url"],

@@ -223,11 +223,12 @@ def on_table_select(event):
     selected = tree.selection()
     if not selected:
         return
-    values = tree.item(selected[0], "values") or ("", "", "", "")
+    values = tree.item(selected[0], "values") or ("", "", "", "", "")
     param = values[0] if len(values) > 0 else ""
     value = values[1] if len(values) > 1 else ""
     check = values[2] if len(values) > 2 else ""
-    comment = values[3] if len(values) > 3 else ""
+    risk = values[3] if len(values) > 3 else ""
+    comment = values[4] if len(values) > 4 else ""
 
     details_text.config(state="normal")
     details_text.delete("1.0", "end")
@@ -236,6 +237,7 @@ def on_table_select(event):
         f"Parametre: {param}\n"
         f"Valeur: {value}\n"
         f"Check: {check}\n"
+        f"Risque: {risk}\n"
         f"Commentaire:\n{comment}",
     )
     details_text.config(state="disabled")
@@ -355,9 +357,13 @@ http_table = create_result_table(tab_http, "HTTP")
 ssl_table = create_result_table(tab_tls, "SSL/TLS")
 cookies_table = create_result_table(tab_cookies, "Cookies")
 
+for tree in (http_table, ssl_table, cookies_table):
+    tree.tag_configure("zebra_even", background="#ffffff")
+    tree.tag_configure("zebra_odd", background="#f3f6fa")
+
 http_table.bind("<<TreeviewSelect>>", on_table_select)
 ssl_table.bind("<<TreeviewSelect>>", on_table_select)
-cookies_table.bind("<<TreeviewSelect>>", on_table_select)
+cookies_table.bind("<<TreeviewSelect>>", on_table_select)   
 
 # Details panel
 details_frame = ttk.LabelFrame(root, text="Détail de la ligne sélectionnée")
