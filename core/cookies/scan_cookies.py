@@ -151,6 +151,68 @@ def _max_severity(findings: list[dict]) -> str:
     )
 
 
+def _select_finding(findings: list[dict], rule_ids: tuple[str, ...]) -> dict | None:
+    matches = [f for f in findings if str(f.get("id", "")) in rule_ids]
+    if not matches:
+        return None
+    return max(matches, key=lambda f: SEV_RANK.get(str(f.get("severity", "info")).lower(), -1))
+
+
+def _build_cookie_assessments(cookie: dict, findings: list[dict]) -> dict:
+    samesite = (cookie.get("samesite") or "").strip().lower()
+    domain = (cookie.get("domain") or "").strip()
+    path = (cookie.get("path") or "/").strip() or "/"
+    size = int(cookie.get("size", 0) or 0)
+    persistent = bool(cookie.get("persistent"))
+
+    secure_finding = _select_finding(findings, ("CK-001", "CK-004", "CK-011", "CK-012"))
+    httponly_finding = _select_finding(findings, ("CK-002",))
+    samesite_finding = _select_finding(findings, ("CK-003", "CK-004", "CK-005"))
+    domain_finding = _select_finding(findings, ("CK-008",))
+    path_finding = _select_finding(findings, ("CK-009",))
+    type_finding = _select_finding(findings, ("CK-006", "CK-007"))
+    size_finding = _select_finding(findings, ("CK-010",))
+
+    return {
+        "name": {
+            "risk": _max_severity(findings),
+            "comment": "Nom de cookie observe dans Set-Cookie" if findings else "Nom de cookie observe",
+        },
+        "secure": {
+            "risk": str(secure_finding.get("severity", "info")).upper() if secure_finding else "INFO",
+            "comment": secure_finding.get("issue", "") if secure_finding else "Attribut Secure present" if cookie.get("secure") else "Attribut Secure absent",
+        },
+        "httponly": {
+            "risk": str(httponly_finding.get("severity", "info")).upper() if httponly_finding else "INFO" if cookie.get("httponly") else "LOW",
+            "comment": httponly_finding.get("issue", "") if httponly_finding else "Attribut HttpOnly present" if cookie.get("httponly") else "Attribut HttpOnly absent",
+        },
+        "samesite": {
+            "risk": str(samesite_finding.get("severity", "info")).upper() if samesite_finding else "INFO",
+            "comment": samesite_finding.get("issue", "") if samesite_finding else f"SameSite defini sur {samesite}" if samesite else "SameSite non defini",
+        },
+        "domain": {
+            "risk": str(domain_finding.get("severity", "info")).upper() if domain_finding else "INFO",
+            "comment": domain_finding.get("issue", "") if domain_finding else "Cookie limite a l'hote courant" if not domain else "Attribut Domain explicite",
+        },
+        "path": {
+            "risk": str(path_finding.get("severity", "info")).upper() if path_finding else "INFO",
+            "comment": path_finding.get("issue", "") if path_finding else f"Path configure sur {path}",
+        },
+        "type": {
+            "risk": str(type_finding.get("severity", "info")).upper() if type_finding else "INFO",
+            "comment": type_finding.get("issue", "") if type_finding else "Cookie persistant" if persistent else "Cookie de session",
+        },
+        "size": {
+            "risk": str(size_finding.get("severity", "info")).upper() if size_finding else "INFO",
+            "comment": size_finding.get("issue", "") if size_finding else f"Taille observee: {size} octets",
+        },
+        "source": {
+            "risk": "INFO",
+            "comment": "URL source de l'en-tete Set-Cookie",
+        },
+    }
+
+
 def _analyze_cookie_rules(
     cookie: dict,
     findings: list[dict],
@@ -183,11 +245,11 @@ def _analyze_cookie_rules(
             status="missing",
         )
 
-    if not httponly and highly_sensitive:
+    if not httponly and sensitive:
         _add_finding(
             findings,
             "CK-002",
-            "high",
+            "high" if highly_sensitive else "medium",
             name,
             "Cookie de session/authentification sans HttpOnly.",
             "Ajouter HttpOnly pour limiter l'acces via JavaScript (XSS).",
@@ -408,6 +470,10 @@ def scan_cookies_config(url: str) -> dict:
                 "Meme nom de cookie utilise sur plusieurs scopes domain/path.",
                 "Uniformiser les scopes ou renommer les cookies pour eviter les collisions.",
             )
+
+    for cookie in parsed_cookies:
+        cookie_findings = [f for f in findings if f.get("cookie") == cookie.get("name")]
+        cookie["assessments"] = _build_cookie_assessments(cookie, cookie_findings)
 
     result["cookies"] = parsed_cookies
     result["findings"] = findings

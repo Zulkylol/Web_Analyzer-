@@ -22,6 +22,7 @@ from core.tls.cert_extensions import analyze_extensions
 from core.tls.tls_policy import analyze_tls_versions_and_policy
 from core.tls.tls_ciphers import analyze_cipher_and_weak_ciphers
 from core.tls.result import init_tls_result
+from core.tls.risk import compute_tls_risks
 
 
 # ===============================================================
@@ -80,5 +81,6 @@ def scan_tls_config(url: str) -> dict:
     # 5) TLS versions/policy + cipher checks
     analyze_tls_versions_and_policy(result, url)
     analyze_cipher_and_weak_ciphers(result, hostname, port)
+    result["risks"] = compute_tls_risks(result)
 
     return result

@@ -74,6 +74,7 @@ def init_tls_result() -> dict:
             "policy": {"ok": True, "comment": ""},
             "cipher": {"name": "", "protocol": "", "bits": 0, "ok": True, "comment": ""},
         },
+        "risks": {},
         "errors": {"message": ""},
     }
 

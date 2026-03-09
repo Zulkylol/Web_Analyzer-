@@ -13,10 +13,12 @@ from utils.url import ck
 def display_cookies(result, cookies_table):
     row_idx = 0
 
-    def add_row(param, value="", check=STATUS_ICON["info"], comment="", risk=""):
+    def add_row(param, value="", check=STATUS_ICON["info"], comment="", risk="", extra_tags=()):
         nonlocal row_idx
         zebra_tag = "zebra_even" if row_idx % 2 == 0 else "zebra_odd"
-        cookies_table.insert("", "end", values=(param, value, check, risk, comment), tags=(zebra_tag,))
+        tags = (zebra_tag,) + tuple(extra_tags)
+        risk_value = str(risk or "").upper()
+        cookies_table.insert("", "end", values=(param, value, check, risk_value, comment), tags=tags)
         row_idx += 1
 
     def yn(flag):
@@ -83,7 +85,7 @@ def display_cookies(result, cookies_table):
 
             add_row(param, cookie_name, icon, f"{rule} ({sev}) : {issue}", risk=sev)
             if rec:
-                add_row("", "↳ Recommandation", STATUS_ICON["info"], SPACER + rec, risk="INFO")
+                add_row("", "↳ Recommandation", STATUS_ICON["info"], rec, risk="INFO")
     else:
         add_row("Findings cookies", "-", STATUS_ICON["ok"], "Aucun probleme de configuration cookie detecte.")
 
@@ -91,6 +93,7 @@ def display_cookies(result, cookies_table):
         add_row("Detail cookie", "", STATUS_ICON["info"], "")
         for i, c in enumerate(cookies, start=1):
             name = c.get("name", "")
+            assessments = c.get("assessments") or {}
             samesite = (c.get("samesite") or "").strip().lower()
             samesite_txt = samesite.capitalize() if samesite else "non defini"
             domain_txt = c.get("domain") or "hote courant"
@@ -99,9 +102,28 @@ def display_cookies(result, cookies_table):
             size_txt = c.get("size", 0)
             source = c.get("from_url", "-")
 
-            add_row(f"Cookie #{i}", name, STATUS_ICON["info"], "")
-            add_row("", f"Secure: {yn(c.get('secure'))}", ck(bool(c.get("secure"))), "")
-            add_row("", f"HttpOnly: {yn(c.get('httponly'))}", ck(bool(c.get("httponly"))), "")
+            add_row(
+                "Cookie name",
+                name,
+                STATUS_ICON["info"],
+                "",
+                risk=assessments.get("name", {}).get("risk", "INFO"),
+                extra_tags=("cookie_name",),
+            )
+            add_row(
+                "Secure",
+                yn(c.get("secure")),
+                ck(bool(c.get("secure"))),
+                assessments.get("secure", {}).get("comment", ""),
+                risk=assessments.get("secure", {}).get("risk", "INFO"),
+            )
+            add_row(
+                "HttpOnly",
+                yn(c.get("httponly")),
+                ck(bool(c.get("httponly"))),
+                assessments.get("httponly", {}).get("comment", ""),
+                risk=assessments.get("httponly", {}).get("risk", "INFO"),
+            )
 
             if not samesite:
                 samesite_state = False
@@ -109,11 +131,47 @@ def display_cookies(result, cookies_table):
                 samesite_state = True
             else:
                 samesite_state = False
-            add_row("", f"SameSite: {samesite_txt}", icon_from_tri_state(samesite_state), "")
+            add_row(
+                "SameSite",
+                samesite_txt,
+                icon_from_tri_state(samesite_state),
+                assessments.get("samesite", {}).get("comment", ""),
+                risk=assessments.get("samesite", {}).get("risk", "INFO"),
+            )
 
-            add_row("", f"Domaine: {domain_txt}", STATUS_ICON["info"], "")
-            add_row("", f"Chemin: {path_txt}", STATUS_ICON["info"], "")
-            add_row("", f"Type: {persistence_txt}", STATUS_ICON["info"], "")
-            add_row("", f"Taille: {size_txt} octets", STATUS_ICON["info"], "")
-            add_row("", f"Source: {source}", STATUS_ICON["info"], "")
+            add_row(
+                "Domain",
+                domain_txt,
+                STATUS_ICON["info"],
+                assessments.get("domain", {}).get("comment", ""),
+                risk=assessments.get("domain", {}).get("risk", "INFO"),
+            )
+            add_row(
+                "Path",
+                path_txt,
+                STATUS_ICON["info"],
+                assessments.get("path", {}).get("comment", ""),
+                risk=assessments.get("path", {}).get("risk", "INFO"),
+            )
+            add_row(
+                "Type",
+                persistence_txt,
+                STATUS_ICON["info"],
+                assessments.get("type", {}).get("comment", ""),
+                risk=assessments.get("type", {}).get("risk", "INFO"),
+            )
+            add_row(
+                "Size",
+                f"{size_txt} octets",
+                STATUS_ICON["info"],
+                assessments.get("size", {}).get("comment", ""),
+                risk=assessments.get("size", {}).get("risk", "INFO"),
+            )
+            add_row(
+                "Source",
+                source,
+                STATUS_ICON["info"],
+                assessments.get("source", {}).get("comment", ""),
+                risk=assessments.get("source", {}).get("risk", "INFO"),
+            )
 

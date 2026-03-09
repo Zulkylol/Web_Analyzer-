@@ -3,6 +3,8 @@
 # ===============================================================
 # IMPORTS
 # ===============================================================
+from urllib.parse import urljoin
+
 from constants import STATUS_ICON
 from utils.url import ck
 
@@ -16,8 +18,17 @@ def display_http(result, http_table):
     def add_row(param, value="", check=STATUS_ICON["info"], comment="", risk=""):
         nonlocal row_idx
         zebra_tag = "zebra_even" if row_idx % 2 == 0 else "zebra_odd"
-        http_table.insert("", "end", values=(param, value, check, risk, comment), tags=(zebra_tag,))
+        risk_value = str(risk or "").upper()
+        http_table.insert("", "end", values=(param, value, check, risk_value, comment), tags=(zebra_tag,))
         row_idx += 1
+
+    def icon_for_risk(risk: str):
+        risk_u = str(risk or "").upper()
+        if risk_u == "HIGH":
+            return STATUS_ICON["high"]
+        if risk_u == "MEDIUM":
+            return STATUS_ICON["warning"]
+        return STATUS_ICON["info"]
 
     redirects = result.get("redirects") or {}
     mixed_urls = result.get("mixed_url") or []
@@ -119,7 +130,20 @@ def display_http(result, http_table):
     )
 
     r_domains = redirects.get("redirect_domains") or []
-    if r_domains:
+    domain_findings = redirects.get("redirect_domain_findings") or []
+    if domain_findings:
+        for i, finding in enumerate(domain_findings, start=1):
+            dom = finding.get("domain", "")
+            dom_risk = str(finding.get("risk", "INFO")).upper()
+            dom_comment = finding.get("comment", "")
+            add_row(
+                "Domaines de redirection" if i == 1 else "",
+                dom,
+                icon_for_risk(dom_risk),
+                dom_comment,
+                risk=dom_risk,
+            )
+    elif r_domains:
         add_row("Domaines de redirection", r_domains[0], STATUS_ICON["info"], redirects.get("rd_comment", ""))
         for dom in r_domains[1:]:
             add_row("", dom, STATUS_ICON["info"], "")
@@ -133,19 +157,52 @@ def display_http(result, http_table):
     r_chain = redirects.get("redirect_chain") or []
     if r_chain:
         for i, hop in enumerate(r_chain, start=1):
-            hop_url = hop.get("url", "") if isinstance(hop, dict) else str(hop)
-            hop_status = hop.get("status", "") if isinstance(hop, dict) else ""
-            add_row("Chaine de redirections" if i == 1 else "", str(hop_status), STATUS_ICON["info"], hop_url)
+            if isinstance(hop, dict):
+                hop_status = hop.get("status", "")
+                hop_url = hop.get("url", "")
+                from_url = hop.get("from_url", "")
+                location = hop.get("location", "")
+                if from_url and location:
+                    resolved_from_location = urljoin(from_url, location)
+                    if resolved_from_location == hop_url:
+                        comment = f"{from_url} -> Redirection: {location}"
+                    else:
+                        comment = f"{from_url} -> Redirection: {location} -> {hop_url}"
+                else:
+                    comment = f"Reponse finale: {hop_url}"
+            else:
+                hop_status = ""
+                comment = str(hop)
 
-    hop_findings = redirects.get("hop_findings") or []
-    if hop_findings:
-        for i, finding in enumerate(hop_findings, start=1):
-            msg = finding.get("message") or finding.get("comment") or finding.get("issue") or str(finding)
-            src = finding.get("from", "")
-            dst = finding.get("to", "")
-            detail = f"{src} -> {dst}" if src and dst else ""
+            add_row("Chaine de redirections" if i == 1 else "", str(hop_status), STATUS_ICON["info"], comment, risk="INFO")
 
-            add_row("Analyse par hop" if i == 1 else "", "", STATUS_ICON["warning"], msg, risk="MEDIUM")
-            if detail:
-                add_row("", "", STATUS_ICON["info"], detail)
+    standard_files = result.get("standard_files") or []
+    if standard_files:
+        for i, item in enumerate(standard_files, start=1):
+            name = item.get("name", "")
+            value = item.get("value", "")
+            risk = str(item.get("risk", "INFO")).upper()
+            comment = item.get("comment", "")
+            src_url = item.get("url", "")
+            full_comment = f"{comment} ({src_url})" if src_url else comment
+            add_row(
+                "Fichiers standards" if i == 1 else "",
+                f"{name}: {value}",
+                icon_for_risk(risk),
+                full_comment,
+                risk=risk,
+            )
+
+    methods = result.get("methods_exposure") or {}
+    methods_risk = str(methods.get("risk", "INFO")).upper()
+    methods_value = methods.get("value", "Unknown")
+    methods_comment = methods.get("comment", "")
+    add_row(
+        "Methodes HTTP exposees",
+        str(methods_value),
+        icon_for_risk(methods_risk),
+        str(methods_comment),
+        risk=methods_risk,
+    )
+
 

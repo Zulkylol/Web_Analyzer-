@@ -15,7 +15,7 @@ from core.tls.scan_tls import scan_tls_config
 from core.cookies.scan_cookies import scan_cookies_config
 from ui.tables import create_result_table, clear_tables
 from ui.display_http import display_http
-from ui.display_tls import display_ssl_tls
+from ui.display_tls import display_ssl_tls 
 from ui.display_cookies import display_cookies
 from constants import STATUS_ICON
 
@@ -360,6 +360,8 @@ cookies_table = create_result_table(tab_cookies, "Cookies")
 for tree in (http_table, ssl_table, cookies_table):
     tree.tag_configure("zebra_even", background="#ffffff")
     tree.tag_configure("zebra_odd", background="#f3f6fa")
+
+cookies_table.tag_configure("cookie_name", font=("Helvetica", 10, "bold"))
 
 http_table.bind("<<TreeviewSelect>>", on_table_select)
 ssl_table.bind("<<TreeviewSelect>>", on_table_select)

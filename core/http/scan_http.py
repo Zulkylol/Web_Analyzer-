@@ -15,6 +15,7 @@ from core.http.redirects import scan_redirections
 from core.http.urls import analyze_url_transition
 from core.http.headers_security import scan_security_headers
 from core.http.result import init_http_result
+from core.http.exposure import scan_standard_files, scan_exposed_methods
 from core.http.response_analysis import (
     evaluate_status,
     evaluate_status_risk,
@@ -134,6 +135,22 @@ def scan_http_config(url: str) -> dict:
         
         # ------ REDIRECTIONS ANALYSIS -------
         result["redirects"] = scan_redirections(response, url)
+
+        # ------ STANDARD FILES ANALYSIS ------
+        result["standard_files"] = scan_standard_files(
+            result["final_url"],
+            requests_module=requests,
+            headers=request_headers,
+            timeout=5,
+        )
+
+        # ------ EXPOSED METHODS ANALYSIS ------
+        result["methods_exposure"] = scan_exposed_methods(
+            result["final_url"],
+            requests_module=requests,
+            headers=request_headers,
+            timeout=5,
+        )
 
     # --------- EXCEPTIONS MANAGMENT ---------
     except requests.exceptions.SSLError as e:

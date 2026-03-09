@@ -39,6 +39,13 @@ def init_http_result(input_url: str, normalized_url: str) -> dict:
         "time_risk": "INFO",
         "missing_headers": [],
         "headers_comment": [],
+        "standard_files": [],
+        "methods_exposure": {
+            "value": "Unknown",
+            "risk": "INFO",
+            "comment": "",
+            "allow": [],
+        },
         "redirects": {},
         "comment": "",
     }

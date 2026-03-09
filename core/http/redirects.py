@@ -29,6 +29,11 @@ def _base_domain(hostname: str | None) -> str:
         return ".".join(parts[-2:])
     return h
 
+
+def _risk_weight(level: str) -> int:
+    order = {"INFO": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3}
+    return order.get(str(level).upper(), 0)
+
 # ===============================================================
 # FUNCTION : scan_redirections()
 # ===============================================================
@@ -46,6 +51,7 @@ def scan_redirections(response, original_url: str) -> dict:
         "num_ok": False,
         "num_comment": "",
         "redirect_domains": [],
+        "redirect_domain_findings": [],
         "redirect_chain": [],
         "hop_findings": [],
         "hop_worst_weight": 0,
@@ -83,6 +89,41 @@ def scan_redirections(response, original_url: str) -> dict:
         result["redirect_domains"] = list(dict.fromkeys(result["redirect_domains"]))
         result["redirect_ips"] = list(dict.fromkeys(result["redirect_ips"]))
 
+        # ---------- PER-DOMAIN RISK CLASSIFICATION ----------
+        domain_findings = []
+        worst_domain_risk = "INFO"
+        for dom in result["redirect_domains"]:
+            dom_base = _base_domain(dom)
+            if dom in result["redirect_ips"]:
+                risk = "HIGH"
+                comment = "Redirection vers IP brute (pas de nom de domaine)."
+            elif dom_base == initial_base_domain:
+                if dom == (initial_domain or "").lower():
+                    risk = "INFO"
+                    comment = "Meme domaine."
+                else:
+                    risk = "LOW"
+                    comment = "Sous-domaine du meme domaine."
+            else:
+                if "xn--" in dom:
+                    risk = "HIGH"
+                    comment = "Domaine externe en punycode (verification manuelle recommandee)."
+                else:
+                    risk = "MEDIUM"
+                    comment = "Redirection vers un domaine externe."
+
+            domain_findings.append(
+                {
+                    "domain": dom,
+                    "risk": risk,
+                    "comment": comment,
+                }
+            )
+            if _risk_weight(risk) > _risk_weight(worst_domain_risk):
+                worst_domain_risk = risk
+
+        result["redirect_domain_findings"] = domain_findings
+
         # ---------------- BUILD REDIRECT CHAIN -----------------
         # Ordered hops (from Location resolution) + final response URL
         # This enables hop-by-hop downgrade/upgrade detection.
@@ -93,6 +134,8 @@ def scan_redirections(response, original_url: str) -> dict:
             target = urljoin(resp.url, loc) if loc else resp.url
             chain.append(
                 {
+                    "from_url": str(getattr(resp, "url", "") or ""),
+                    "location": str(loc or ""),
                     "url": str(target),
                     "status": int(getattr(resp, "status_code", 0) or 0),
                 }
@@ -101,6 +144,8 @@ def scan_redirections(response, original_url: str) -> dict:
         # final hop (what requests ended up on)
         chain.append(
             {
+                "from_url": "",
+                "location": "",
                 "url": str(getattr(response, "url", "") or ""),
                 "status": int(getattr(response, "status_code", 0) or 0),
             }
@@ -120,42 +165,51 @@ def scan_redirections(response, original_url: str) -> dict:
             except Exception:
                 continue
 
-            # hop_report may be a dict OR a tuple (legacy return)
-            if isinstance(hop_report, tuple):
-                # Most common: (report_dict, ...) -> take first element if it's a dict
-                report = hop_report[0] if hop_report else {}
-                if not isinstance(report, dict):
-                    report = {}
+            # Current analyze_url_transition returns:
+            # (final_url, url_ok, url_comment, url_findings, url_risk)
+            if isinstance(hop_report, tuple) and len(hop_report) >= 5:
+                _, hop_ok, hop_comment, hop_findings, hop_risk = hop_report[:5]
+                weight = _risk_weight(hop_risk) * 30
+                worst_weight = max(worst_weight, weight)
+
+                findings = hop_findings or []
+                if not findings and hop_ok is not True and hop_comment:
+                    findings = [hop_comment]
+
+                for msg in findings:
+                    result["hop_findings"].append(
+                        {
+                            "hop_index": i,
+                            "from": src,
+                            "to": dst,
+                            "message": str(msg),
+                            "risk": str(hop_risk).upper(),
+                        }
+                    )
             elif isinstance(hop_report, dict):
-                report = hop_report
-            else:
-                report = {}
-
-            weight = int(report.get("final_weight", 0) or 0)
-            worst_weight = max(worst_weight, weight)
-
-            findings = report.get("findings", []) or []
-            for f in findings:
-                # keep hop context
-                if isinstance(f, dict):
-                    result["hop_findings"].append(
-                        {
-                            "hop_index": i,
-                            "from": src,
-                            "to": dst,
-                            **f,
-                        }
-                    )
-                else:
-                    # fallback if a finding isn't a dict
-                    result["hop_findings"].append(
-                        {
-                            "hop_index": i,
-                            "from": src,
-                            "to": dst,
-                            "message": str(f),
-                        }
-                    )
+                # Backward compatibility if a dict-based report is introduced later.
+                weight = int(hop_report.get("final_weight", 0) or 0)
+                worst_weight = max(worst_weight, weight)
+                findings = hop_report.get("findings", []) or []
+                for f in findings:
+                    if isinstance(f, dict):
+                        result["hop_findings"].append(
+                            {
+                                "hop_index": i,
+                                "from": src,
+                                "to": dst,
+                                **f,
+                            }
+                        )
+                    else:
+                        result["hop_findings"].append(
+                            {
+                                "hop_index": i,
+                                "from": src,
+                                "to": dst,
+                                "message": str(f),
+                            }
+                        )
 
         result["hop_worst_weight"] = worst_weight
 
@@ -174,7 +228,7 @@ def scan_redirections(response, original_url: str) -> dict:
         elif len(history) > 2:
             if result["risk"] == "Low":
                 result["risk"] = "Medium"
-            result["num_comment"] = "Plusieurs redirections détectées."
+            result["num_comment"] = "Plusieurs redirections detectees."
             result["num_ok"] = None
         else:
             result["num_comment"] = "Nombre de redirection(s) normal"
@@ -188,6 +242,12 @@ def scan_redirections(response, original_url: str) -> dict:
                     if result["risk"] == "Low":
                         result["risk"] = "Medium"
                     break
+
+        if worst_domain_risk in ("HIGH", "MEDIUM"):
+            if worst_domain_risk == "HIGH":
+                result["risk"] = "High"
+            elif result["risk"] == "Low":
+                result["risk"] = "Medium"
 
         if result["redirect_ips"]:
             result["ri_comment"] = f"Redirection vers IP brute ({', '.join(result['redirect_ips'])})."
