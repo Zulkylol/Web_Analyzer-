@@ -96,32 +96,11 @@ def evaluate_http_version_risk(http_version: str) -> str:
     Classify HTTP version risk.
     """
     v = (http_version or "").strip().upper()
-    if v in {"HTTP/2", "HTTP/3", "H2", "H3"}:
+    if v in {"HTTP/2", "HTTP/3", "H2", "H3", "HTTP/1.1"}:
         return "INFO"
-    if v == "HTTP/1.1":
-        return "LOW"
     if v in {"HTTP/1.0", "HTTP/0.9"}:
         return "HIGH"
     return "MEDIUM"
-
-
-# ===============================================================
-# FUNCTION : detect_https(url)
-# ===============================================================
-def detect_https(final_url: str) -> tuple[bool, str]:
-    """
-    Check whether the final URL uses HTTPS.
-
-    Returns:
-        tuple[bool, str]:
-            (uses_https, comment)
-    """
-    uses_https = final_url.startswith("https://")
-    comment = "Site sécurisé (HTTPS)" if uses_https else "Site non sécurisé (HTTP)"
-    
-    return uses_https, comment
-
-
 def evaluate_https_posture(
     original_url: str,
     final_url: str,

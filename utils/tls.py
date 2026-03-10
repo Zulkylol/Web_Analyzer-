@@ -4,45 +4,19 @@
 # IMPORTS
 # ===============================================================
 from __future__ import annotations
+
 import socket
 import ssl
 from dataclasses import dataclass
 from typing import Optional, Tuple
 from urllib.parse import urlparse
+
 import certifi
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
 
+from utils.url import normalize_url
 
-# ===============================================================
-# FUNCTION : strip_pem_headers()
-# ===============================================================
-
-def strip_pem_headers(pem_key: str) -> str:
-    """
-    Remove PEM header, footer, and line breaks from a public key string.
-    """
-    return pem_key.replace("-----BEGIN PUBLIC KEY-----", "") \
-                  .replace("-----END PUBLIC KEY-----", "") \
-                  .replace("\n", "")
-
-
-# ===============================================================
-# FUNCTION : public_key_to_clear_text()
-# ===============================================================
-def public_key_to_clear_text(pem_or_base64: str) -> str: 
-    """
-    Return Base64 public key without PEM headers or extra whitespace.
-    """
-
-    # If the key contains PEM markers, remove them
-    if "BEGIN PUBLIC KEY" in pem_or_base64:
-        lines = pem_or_base64.splitlines()
-        # Keep only the lines between the markers
-        lines = [line for line in lines if "-----" not in line]
-        return "".join(lines)
-    else:
-        # Otherwise, assume it is already raw Base64
-        return pem_or_base64.strip()
-    
 
 # ===============================================================
 # FUNCTION : is_chain_trusted_by_mozilla()
@@ -128,12 +102,26 @@ def server_accepts_cipher(hostname, port, tls_version, cipher_string):
     except Exception:
         return False
 
+
+def prepare_tls_target(url: str) -> tuple[str, str, int, str]:
+    normalized_url = normalize_url(url)
+    parsed = urlparse(normalized_url)
+    hostname = (parsed.hostname or "").lower().strip() or normalized_url
+    port = parsed.port or 443
+    hostname_for_match = parsed.hostname or hostname
+    return normalized_url, hostname, port, hostname_for_match
+
+
 @dataclass
 class TLSArtifacts:
     der_cert: Optional[bytes]
     negotiated_version: str
     cipher_tuple: Optional[Tuple[str, str, int]]
     error: str = ""
+
+
+def load_x509_certificate(der_cert: bytes) -> x509.Certificate:
+    return x509.load_der_x509_certificate(der_cert, default_backend())
 
 # ===============================================================
 # FUNCTION : fetch_tls_artifacts()

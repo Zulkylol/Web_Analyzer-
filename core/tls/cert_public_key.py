@@ -1,31 +1,15 @@
-# core/tls/cert_public_key.py
-
-# ===============================================================
-# IMPORTS
-# ===============================================================
 from __future__ import annotations
+
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 
-# ===============================================================
-# FUNCTION : analyze_public_key()
-# ===============================================================
+
 def analyze_public_key(result: dict, x509_cert: x509.Certificate) -> None:
     """
     Analyze the certificate public key and assess its strength for TLS usage.
 
-    Extracts key type, size, curve (if EC), PEM encoding, and generates validation flags/comments 
-    based on common security recommendations (e.g., RSA key length, accepted EC curves, DSA deprecation).
-
-    Updates result["certificate"]["public_key"] in place with:
-        - type, size, curve, pem
-        - ok (bool | None)
-        - comment (str)
-        - summary (str)
-
-    Args:
-        result (dict): Analysis dictionary to update.
-        x509_cert (x509.Certificate): Parsed certificate object.
+    Updates result["certificate"]["public_key"] in place with type, size,
+    curve, PEM representation, a validation flag, and a short summary.
     """
     cert_public_key = result["certificate"]["public_key"]
 
@@ -61,28 +45,28 @@ def analyze_public_key(result: dict, x509_cert: x509.Certificate) -> None:
             elif pk_size == 2048:
                 ok, comment = True, "RSA 2048 bits (minimum moderne)."
             elif pk_size == 3072:
-                ok, comment = True, "RSA 3072 bits (très bien)."
+                ok, comment = True, "RSA 3072 bits (tres bien)."
             else:
-                ok, comment = None, f"RSA {pk_size} bits (OK, mais plus lent / pas forcément utile)."
+                ok, comment = True, f"RSA {pk_size} bits (robuste, mais plus lent / pas forcement utile)."
 
         elif pk_type in ("EllipticCurvePublicKey", "ECPublicKey"):
             good = {"secp256r1", "prime256v1", "secp384r1", "secp521r1"}
             bad = {"secp192r1", "secp224r1"}
-            c = (curve_name or "").lower()
+            curve_name_l = (curve_name or "").lower()
 
-            if not c:
-                ok, comment = None, "Clé EC détectée mais courbe inconnue."
-            elif c in bad:
+            if not curve_name_l:
+                ok, comment = None, "Cle EC detectee mais courbe inconnue."
+            elif curve_name_l in bad:
                 ok, comment = False, f"Courbe EC faible/legacy ({curve_name})."
-            elif c in good:
+            elif curve_name_l in good:
                 ok, comment = True, f"Courbe EC moderne ({curve_name})."
             else:
-                ok, comment = None, f"Courbe EC non standard à vérifier ({curve_name})."
+                ok, comment = None, f"Courbe EC non standard a verifier ({curve_name})."
 
         elif pk_type == "DSAPublicKey":
-            ok, comment = False, "DSA (déconseillé/obsolète pour TLS serveur)."
+            ok, comment = False, "DSA (deconseille/obsolete pour TLS serveur)."
         else:
-            ok, comment = None, f"Type de clé non standard ({pk_type}) à vérifier."
+            ok, comment = None, f"Type de cle non standard ({pk_type}) a verifier."
 
         cert_public_key["ok"] = ok
         cert_public_key["comment"] = comment
@@ -96,6 +80,6 @@ def analyze_public_key(result: dict, x509_cert: x509.Certificate) -> None:
         else:
             cert_public_key["summary"] = pk_type
 
-    except Exception as e:
+    except Exception as exc:
         cert_public_key["ok"] = None
-        cert_public_key["comment"] = f"⚠️ Impossible d'analyser la clé publique: {e}"
+        cert_public_key["comment"] = f"Impossible d'analyser la cle publique: {exc}"

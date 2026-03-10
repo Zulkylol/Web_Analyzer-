@@ -27,6 +27,7 @@ def init_http_result(input_url: str, normalized_url: str) -> dict:
         "https_risk": "MEDIUM",
         "mixed_content": False,
         "mixed_content_level": "",
+        "mixed_content_risk": "INFO",
         "mixed_url": [],
         "mixed_comment": "Aucun contenu mixte détecté",
         "original_url": normalized_url,

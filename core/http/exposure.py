@@ -59,7 +59,7 @@ def scan_standard_files(
                     {
                         "name": label,
                         "value": f"Missing ({code})",
-                        "risk": "LOW" if label == "robots.txt" else "MEDIUM",
+                        "risk": "LOW",
                         "comment": f"{path} introuvable",
                         "url": str(getattr(resp, "url", "") or url),
                     }

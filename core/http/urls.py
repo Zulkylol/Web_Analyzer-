@@ -4,7 +4,6 @@
 # IMPORTS
 # ===============================================================
 from urllib.parse import urlparse
-from urllib.parse import urlparse
 
 # ===============================================================
 # FUNCTION : analyze_url_transistion(original_url, final_url)

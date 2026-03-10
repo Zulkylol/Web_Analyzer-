@@ -176,7 +176,7 @@ def scan_security_headers(
                     "weak",
                     _lower_sev(expected("Content-Security-Policy")),
                     "CSP contient unsafe-inline et/ou unsafe-eval",
-                    "Éviter unsafe-inline/unsafe-eval; utiliser nonces/hashes pour scripts/styles",
+                    "Durcir la CSP en interdisant les scripts inline et l'évaluation dynamique ('unsafe-inline', 'unsafe-eval')",
                     active_value,
                 )
             elif "default-src" not in directives:

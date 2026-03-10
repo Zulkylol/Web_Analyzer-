@@ -35,9 +35,7 @@ def compute_tls_risks(result: dict) -> dict:
         "tls_policy": _risk_from_bool(tls.get("policy", {}).get("ok"), true_risk="INFO", false_risk="HIGH"),
         "cipher": _risk_from_bool(tls.get("cipher", {}).get("ok")),
         "cipher_bits": "HIGH" if (tls.get("cipher", {}).get("bits") or 0) < 128 else "INFO",
-        "weak_ciphers": _risk_from_bool(
-            tls.get("weak_cipher_ok"), true_risk="INFO", false_risk="HIGH", none_risk="LOW"
-        ),
+        "weak_ciphers": "INFO",
     }
     serial = cert.get("serial", {}) or {}
     serial_ok = serial.get("ok")
@@ -50,6 +48,15 @@ def compute_tls_risks(result: dict) -> dict:
     multi_domain_comment = str(host.get("warnings", {}).get("multi_domain", "")).lower()
     if host.get("ok") is None:
         risks["san_count"] = "MEDIUM" if "massif" in multi_domain_comment else "LOW"
+
+    weak_cipher_support = tls.get("weak_cipher_support", {}) or {}
+    if tls.get("weak_cipher_ok") is None:
+        risks["weak_ciphers"] = "LOW"
+    elif tls.get("weak_cipher_ok") is False:
+        if any(weak_cipher_support.get(k) for k in ("3DES", "RC4", "MD5")):
+            risks["weak_ciphers"] = "HIGH"
+        elif weak_cipher_support.get("AES-CBC"):
+            risks["weak_ciphers"] = "LOW"
 
     negotiated_version = str(tls.get("negotiated_version") or "")
     if negotiated_version == "TLSv1.3":

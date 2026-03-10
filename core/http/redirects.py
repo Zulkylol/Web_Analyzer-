@@ -34,6 +34,20 @@ def _risk_weight(level: str) -> int:
     order = {"INFO": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3}
     return order.get(str(level).upper(), 0)
 
+
+def _format_redirect_chain_comment(hop: dict) -> str:
+    from_url = str(hop.get("from_url", "") or "")
+    location = str(hop.get("location", "") or "")
+    hop_url = str(hop.get("url", "") or "")
+
+    if from_url and location:
+        resolved_from_location = urljoin(from_url, location)
+        if resolved_from_location == hop_url:
+            return f"{from_url} -> Redirection: {location}"
+        return f"{from_url} -> Redirection: {location} -> {hop_url}"
+
+    return f"Reponse finale: {hop_url}"
+
 # ===============================================================
 # FUNCTION : scan_redirections()
 # ===============================================================
@@ -49,6 +63,7 @@ def scan_redirections(response, original_url: str) -> dict:
     result = {
         "num_redirects": len(history),
         "num_ok": False,
+        "num_risk": "INFO",
         "num_comment": "",
         "redirect_domains": [],
         "redirect_domain_findings": [],
@@ -58,7 +73,7 @@ def scan_redirections(response, original_url: str) -> dict:
         "rd_comment": "",
         "redirect_ips": [],
         "ri_comment": "",
-        "risk": "Low",
+        "risk": "Info",
     }
 
     # ----------- STORE REDIRECT DOMAINS/IPS ----------------
@@ -94,13 +109,22 @@ def scan_redirections(response, original_url: str) -> dict:
         worst_domain_risk = "INFO"
         for dom in result["redirect_domains"]:
             dom_base = _base_domain(dom)
+            normalized_initial = (initial_domain or "").lower().strip(".")
+            normalized_dom = (dom or "").lower().strip(".")
+            apex_www_pair = {
+                normalized_initial,
+                normalized_dom,
+            } == {initial_base_domain, f"www.{initial_base_domain}"} and bool(initial_base_domain)
             if dom in result["redirect_ips"]:
                 risk = "HIGH"
                 comment = "Redirection vers IP brute (pas de nom de domaine)."
             elif dom_base == initial_base_domain:
-                if dom == (initial_domain or "").lower():
+                if normalized_dom == normalized_initial:
                     risk = "INFO"
                     comment = "Meme domaine."
+                elif apex_www_pair:
+                    risk = "INFO"
+                    comment = "Redirection standard entre domaine nu et www."
                 else:
                     risk = "LOW"
                     comment = "Sous-domaine du meme domaine."
@@ -109,7 +133,7 @@ def scan_redirections(response, original_url: str) -> dict:
                     risk = "HIGH"
                     comment = "Domaine externe en punycode (verification manuelle recommandee)."
                 else:
-                    risk = "MEDIUM"
+                    risk = "LOW"
                     comment = "Redirection vers un domaine externe."
 
             domain_findings.append(
@@ -132,24 +156,24 @@ def scan_redirections(response, original_url: str) -> dict:
         for resp in history:
             loc = resp.headers.get("Location")
             target = urljoin(resp.url, loc) if loc else resp.url
-            chain.append(
-                {
-                    "from_url": str(getattr(resp, "url", "") or ""),
-                    "location": str(loc or ""),
-                    "url": str(target),
-                    "status": int(getattr(resp, "status_code", 0) or 0),
-                }
-            )
+            hop = {
+                "from_url": str(getattr(resp, "url", "") or ""),
+                "location": str(loc or ""),
+                "url": str(target),
+                "status": int(getattr(resp, "status_code", 0) or 0),
+            }
+            hop["display_comment"] = _format_redirect_chain_comment(hop)
+            chain.append(hop)
 
         # final hop (what requests ended up on)
-        chain.append(
-            {
-                "from_url": "",
-                "location": "",
-                "url": str(getattr(response, "url", "") or ""),
-                "status": int(getattr(response, "status_code", 0) or 0),
-            }
-        )
+        final_hop = {
+            "from_url": "",
+            "location": "",
+            "url": str(getattr(response, "url", "") or ""),
+            "status": int(getattr(response, "status_code", 0) or 0),
+        }
+        final_hop["display_comment"] = _format_redirect_chain_comment(final_hop)
+        chain.append(final_hop)
 
         result["redirect_chain"] = chain
 
@@ -221,16 +245,23 @@ def scan_redirections(response, original_url: str) -> dict:
             result["risk"] = "Medium"
 
         # --------------- REDIRECTIONS VOLUME -------------------
-        if len(history) > 6:
+        if len(history) > 7:
             result["risk"] = "High"
+            result["num_risk"] = "HIGH"
             result["num_comment"] = "Nombre excessif de redirections !"
             result["num_ok"] = False
-        elif len(history) > 2:
+        elif len(history) > 5:
             if result["risk"] == "Low":
                 result["risk"] = "Medium"
-            result["num_comment"] = "Plusieurs redirections detectees."
+            result["num_risk"] = "MEDIUM"
+            result["num_comment"] = "Nombre de redirections eleve."
+            result["num_ok"] = None
+        elif len(history) > 3:
+            result["num_risk"] = "LOW"
+            result["num_comment"] = "Quelques redirections detectees."
             result["num_ok"] = None
         else:
+            result["num_risk"] = "INFO"
             result["num_comment"] = "Nombre de redirection(s) normal"
             result["num_ok"] = True
 

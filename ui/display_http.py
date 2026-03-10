@@ -1,12 +1,7 @@
 ﻿# ui/display_http.py
 
-# ===============================================================
-# IMPORTS
-# ===============================================================
-from urllib.parse import urljoin
-
-from constants import STATUS_ICON
-from utils.url import icon_for_risk
+from constants import SPACER, STATUS_ICON
+from ui.icons import icon_for_risk
 
 
 # ===============================================================
@@ -19,7 +14,8 @@ def display_http(result, http_table):
         nonlocal row_idx
         zebra_tag = "zebra_even" if row_idx % 2 == 0 else "zebra_odd"
         risk_value = str(risk or "").upper()
-        http_table.insert("", "end", values=(param, value, check, risk_value, comment), tags=(zebra_tag,))
+        comment_value = f"{SPACER}{comment}" if str(comment or "") else ""
+        http_table.insert("", "end", values=(param, value, check, risk_value, comment_value), tags=(zebra_tag,))
         row_idx += 1
 
     redirects = result.get("redirects") or {}
@@ -83,8 +79,7 @@ def display_http(result, http_table):
 
     if uses_https:
         mixed = bool(result.get("mixed_content"))
-        mixed_level = str(result.get("mixed_content_level", "")).lower()
-        mixed_risk = "HIGH" if mixed_level == "active" else "MEDIUM" if mixed else "INFO"
+        mixed_risk = str(result.get("mixed_content_risk", "INFO")).upper()
         add_row(
             "Contenu mixte",
             "Oui" if mixed else "Non",
@@ -101,8 +96,12 @@ def display_http(result, http_table):
             add_row("URL mixte" if i == 1 else "", url_m, icon_for_risk(mixed_risk or "MEDIUM"), origin, risk=mixed_risk or "MEDIUM")
 
     if result.get("header_findings"):
-        for i, finding in enumerate(result["header_findings"], start=1):
-            param = "Headers de securite" if i == 1 else ""
+        header_idx = 0
+        for finding in result["header_findings"]:
+            if not uses_https and finding.get("header") == "Strict-Transport-Security":
+                continue
+            header_idx += 1
+            param = f"Header de securite #{header_idx}"
             header = finding["header"]
             icon = icon_for_risk(str(finding.get("severity", "")).upper())
             comment = str(finding.get("issue", ""))
@@ -112,7 +111,7 @@ def display_http(result, http_table):
                 add_row("", "↳ Recommandation", STATUS_ICON["info"], finding["recommendation"], risk="INFO")
 
     num_redir = redirects.get("num_redirects", 0)
-    redir_risk = str(redirects.get("risk", "Low")).upper()
+    redir_risk = str(redirects.get("num_risk", "INFO")).upper()
     add_row(
         "Nombre de redirections",
         str(num_redir),
@@ -151,17 +150,7 @@ def display_http(result, http_table):
         for i, hop in enumerate(r_chain, start=1):
             if isinstance(hop, dict):
                 hop_status = hop.get("status", "")
-                hop_url = hop.get("url", "")
-                from_url = hop.get("from_url", "")
-                location = hop.get("location", "")
-                if from_url and location:
-                    resolved_from_location = urljoin(from_url, location)
-                    if resolved_from_location == hop_url:
-                        comment = f"{from_url} -> Redirection: {location}"
-                    else:
-                        comment = f"{from_url} -> Redirection: {location} -> {hop_url}"
-                else:
-                    comment = f"Reponse finale: {hop_url}"
+                comment = str(hop.get("display_comment", ""))
             else:
                 hop_status = ""
                 comment = str(hop)
@@ -177,8 +166,14 @@ def display_http(result, http_table):
             comment = item.get("comment", "")
             src_url = item.get("url", "")
             full_comment = f"{comment} ({src_url})" if src_url else comment
+            if name == "robots.txt":
+                param = "Fichier Robots"
+            elif name == "security.txt":
+                param = "Fichier Security"
+            else:
+                param = "Fichiers standards" if i == 1 else ""
             add_row(
-                "Fichiers standards" if i == 1 else "",
+                param,
                 f"{name}: {value}",
                 icon_for_risk(risk),
                 full_comment,

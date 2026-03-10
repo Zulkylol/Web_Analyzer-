@@ -1,421 +1,24 @@
-# core/cookies/scan_cookies.py
-
-# ===============================================================
-# IMPORTS
-# ===============================================================
 from __future__ import annotations
-
-from http.cookies import SimpleCookie
-from urllib.parse import urlparse
-import re
 
 import requests
 
 from constants import HEADER
+from core.cookies.assessments import build_cookie_assessments
+from core.cookies.parser import collect_response_cookies
+from core.cookies.result import init_cookies_result
+from core.cookies.rules import add_scope_collision_findings, analyze_cookie_rules
+from core.cookies.summary import (
+    cookie_count_risk,
+    count_sensitive_cookies,
+    max_severity,
+    severity_counts,
+    sort_findings_by_severity,
+)
 from utils.url import normalize_url
 
 
-HIGHLY_SENSITIVE_COOKIE_NAMES = {
-    "sessionid",
-    "phpsessid",
-    "jsessionid",
-    "connect.sid",
-    "sid",
-    "auth",
-    "authorization",
-    "access_token",
-    "refresh_token",
-    "jwt",
-    "csrf_token",
-    "xsrf-token",
-    "__host-session",
-    "__secure-session",
-}
-
-MAYBE_SENSITIVE_COOKIE_RE = re.compile(
-    r"(^|[_\-.])(session|sess|auth|token|jwt|csrf|xsrf|sid)($|[_\-.])",
-    re.IGNORECASE,
-)
-
-SEV_RANK = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
-
-
-# ===============================================================
-# HELPERS
-# ===============================================================
-def _to_int(value: str | None) -> int | None:
-    if value is None:
-        return None
-    try:
-        return int(str(value).strip())
-    except Exception:
-        return None
-
-
-def _extract_set_cookie_headers(response: requests.Response) -> list[str]:
-    values = []
-    raw_headers = getattr(response, "raw", None)
-    raw_headers = getattr(raw_headers, "headers", None)
-
-    # urllib3 HTTPHeaderDict usually provides getlist.
-    if raw_headers is not None and hasattr(raw_headers, "getlist"):
-        values.extend(raw_headers.getlist("Set-Cookie"))
-
-    # Fallback for environments where only merged headers are available.
-    if not values:
-        merged = response.headers.get("Set-Cookie")
-        if merged:
-            values.append(merged)
-    return [v for v in values if v]
-
-
-def _parse_cookie_line(set_cookie_line: str) -> dict | None:
-    parts = [p.strip() for p in set_cookie_line.split(";") if p.strip()]
-    if not parts or "=" not in parts[0]:
-        return None
-
-    name, value = parts[0].split("=", 1)
-    attrs: dict[str, str | bool] = {}
-
-    for token in parts[1:]:
-        if "=" in token:
-            k, v = token.split("=", 1)
-            attrs[k.strip().lower()] = v.strip()
-        else:
-            attrs[token.strip().lower()] = True
-
-    secure = bool(attrs.get("secure", False))
-    httponly = bool(attrs.get("httponly", False))
-    samesite = str(attrs.get("samesite", "")).strip().lower() if "samesite" in attrs else ""
-    domain = str(attrs.get("domain", "")).strip()
-    path = str(attrs.get("path", "")).strip() or "/"
-    max_age = _to_int(attrs.get("max-age")) if "max-age" in attrs else None
-    expires = str(attrs.get("expires", "")).strip() if "expires" in attrs else ""
-    persistent = bool(expires) or (max_age is not None)
-    size = len(set_cookie_line.encode("utf-8"))
-
-    return {
-        "name": name.strip(),
-        "value_len": len(value),
-        "secure": secure,
-        "httponly": httponly,
-        "samesite": samesite,
-        "domain": domain,
-        "path": path,
-        "max_age": max_age,
-        "expires": expires,
-        "persistent": persistent,
-        "size": size,
-        "priority": str(attrs.get("priority", "")).strip(),
-        "partitioned": bool(attrs.get("partitioned", False)),
-        "raw": set_cookie_line,
-    }
-
-
-def _cookie_sensitivity_flags(name: str) -> tuple[bool, bool, bool]:
-    name_l = name.lower().strip()
-    highly_sensitive = name_l in HIGHLY_SENSITIVE_COOKIE_NAMES
-    maybe_sensitive = bool(MAYBE_SENSITIVE_COOKIE_RE.search(name_l))
-    sensitive = highly_sensitive or maybe_sensitive
-    return highly_sensitive, maybe_sensitive, sensitive
-
-
-def _deduplicate_cookies(cookies: list[dict]) -> list[dict]:
-    deduped: list[dict] = []
-    seen: set[tuple] = set()
-
-    for cookie in cookies:
-        key = (
-            (cookie.get("name") or "").strip().lower(),
-            (cookie.get("domain") or "").strip().lower(),
-            (cookie.get("path") or "/").strip() or "/",
-            bool(cookie.get("secure")),
-            bool(cookie.get("httponly")),
-            (cookie.get("samesite") or "").strip().lower(),
-            cookie.get("max_age"),
-            bool(cookie.get("persistent")),
-            int(cookie.get("size", 0) or 0),
-        )
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped.append(cookie)
-
-    return deduped
-
-
-def _add_finding(
-    findings: list[dict],
-    rule_id: str,
-    severity: str,
-    cookie_name: str,
-    issue: str,
-    recommendation: str,
-    status: str = "warning",
-) -> None:
-    findings.append(
-        {
-            "id": rule_id,
-            "severity": severity,
-            "cookie": cookie_name,
-            "status": status,
-            "issue": issue,
-            "recommendation": recommendation,
-        }
-    )
-
-
-def _severity_counts(findings: list[dict]) -> dict:
-    counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
-    for f in findings:
-        sev = str(f.get("severity", "info")).lower()
-        if sev in counts:
-            counts[sev] += 1
-    return counts
-
-
-def _max_severity(findings: list[dict]) -> str:
-    if not findings:
-        return "info"
-    return max(
-        (str(f.get("severity", "info")).lower() for f in findings),
-        key=lambda s: SEV_RANK.get(s, -1),
-    )
-
-
-def _select_finding(findings: list[dict], rule_ids: tuple[str, ...]) -> dict | None:
-    matches = [f for f in findings if str(f.get("id", "")) in rule_ids]
-    if not matches:
-        return None
-    return max(matches, key=lambda f: SEV_RANK.get(str(f.get("severity", "info")).lower(), -1))
-
-
-def _build_cookie_assessments(cookie: dict, findings: list[dict]) -> dict:
-    samesite = (cookie.get("samesite") or "").strip().lower()
-    domain = (cookie.get("domain") or "").strip()
-    path = (cookie.get("path") or "/").strip() or "/"
-    size = int(cookie.get("size", 0) or 0)
-    persistent = bool(cookie.get("persistent"))
-
-    secure_finding = _select_finding(findings, ("CK-001", "CK-004", "CK-011", "CK-012"))
-    httponly_finding = _select_finding(findings, ("CK-002",))
-    samesite_finding = _select_finding(findings, ("CK-003", "CK-004", "CK-005"))
-    domain_finding = _select_finding(findings, ("CK-008",))
-    path_finding = _select_finding(findings, ("CK-009",))
-    type_finding = _select_finding(findings, ("CK-006", "CK-007"))
-    size_finding = _select_finding(findings, ("CK-010",))
-
-    return {
-        "name": {
-            "risk": _max_severity(findings),
-            "comment": "Nom de cookie observe dans Set-Cookie" if findings else "Nom de cookie observe",
-        },
-        "secure": {
-            "risk": str(secure_finding.get("severity", "info")).upper() if secure_finding else "INFO",
-            "comment": secure_finding.get("issue", "") if secure_finding else "Attribut Secure present" if cookie.get("secure") else "Attribut Secure absent",
-        },
-        "httponly": {
-            "risk": str(httponly_finding.get("severity", "info")).upper() if httponly_finding else "INFO" if cookie.get("httponly") else "LOW",
-            "comment": httponly_finding.get("issue", "") if httponly_finding else "Attribut HttpOnly present" if cookie.get("httponly") else "Attribut HttpOnly absent",
-        },
-        "samesite": {
-            "risk": str(samesite_finding.get("severity", "info")).upper() if samesite_finding else "INFO",
-            "comment": samesite_finding.get("issue", "") if samesite_finding else f"SameSite defini sur {samesite}" if samesite else "SameSite non defini",
-        },
-        "domain": {
-            "risk": str(domain_finding.get("severity", "info")).upper() if domain_finding else "INFO",
-            "comment": domain_finding.get("issue", "") if domain_finding else "Cookie limite a l'hote courant" if not domain else "Attribut Domain explicite",
-        },
-        "path": {
-            "risk": str(path_finding.get("severity", "info")).upper() if path_finding else "INFO",
-            "comment": path_finding.get("issue", "") if path_finding else f"Path configure sur {path}",
-        },
-        "type": {
-            "risk": str(type_finding.get("severity", "info")).upper() if type_finding else "INFO",
-            "comment": type_finding.get("issue", "") if type_finding else "Cookie persistant" if persistent else "Cookie de session",
-        },
-        "size": {
-            "risk": str(size_finding.get("severity", "info")).upper() if size_finding else "INFO",
-            "comment": size_finding.get("issue", "") if size_finding else f"Taille observee: {size} octets",
-        },
-        "source": {
-            "risk": "INFO",
-            "comment": "URL source de l'en-tete Set-Cookie",
-        },
-    }
-
-
-def _analyze_cookie_rules(
-    cookie: dict,
-    findings: list[dict],
-) -> None:
-    name = cookie["name"]
-    highly_sensitive, _maybe_sensitive, sensitive = _cookie_sensitivity_flags(name)
-    secure = bool(cookie["secure"])
-    httponly = bool(cookie["httponly"])
-    samesite = (cookie.get("samesite") or "").lower().strip()
-    domain = (cookie.get("domain") or "").strip()
-    path = (cookie.get("path") or "/").strip() or "/"
-    max_age = cookie.get("max_age")
-    persistent = bool(cookie.get("persistent"))
-    size = int(cookie.get("size", 0))
-    source_scheme = (cookie.get("source_scheme") or "").lower()
-    source_host = (cookie.get("source_host") or "").lower()
-    is_https_cookie = source_scheme == "https"
-
-    if not secure and is_https_cookie:
-        _add_finding(
-            findings,
-            "CK-001",
-            "high" if highly_sensitive else "low",
-            name,
-            "Le cookie est servi en HTTPS sans attribut Secure.",
-            "Ajouter Secure pour forcer l'envoi du cookie uniquement en HTTPS.",
-            status="missing",
-        )
-
-    if not httponly and sensitive:
-        _add_finding(
-            findings,
-            "CK-002",
-            "high" if highly_sensitive else "medium",
-            name,
-            "Cookie de session/authentification sans HttpOnly.",
-            "Ajouter HttpOnly pour limiter l'acces via JavaScript (XSS).",
-            status="missing",
-        )
-
-    if not samesite:
-        _add_finding(
-            findings,
-            "CK-003",
-            "medium" if sensitive else "low",
-            name,
-            "Attribut SameSite absent.",
-            "Definir SameSite=Lax (ou Strict selon le besoin fonctionnel).",
-            status="missing",
-        )
-
-    if samesite == "none" and not secure:
-        _add_finding(
-            findings,
-            "CK-004",
-            "high",
-            name,
-            "SameSite=None sans Secure.",
-            "Avec SameSite=None, Secure est requis par les navigateurs modernes.",
-            status="invalid",
-        )
-
-    if samesite and samesite not in {"lax", "strict", "none"}:
-        _add_finding(
-            findings,
-            "CK-005",
-            "low",
-            name,
-            f"Valeur SameSite non reconnue: {samesite}.",
-            "Utiliser Strict, Lax ou None.",
-            status="invalid",
-        )
-
-    if highly_sensitive and persistent:
-        _add_finding(
-            findings,
-            "CK-006",
-            "low",
-            name,
-            "Cookie sensible persistant (non-session).",
-            "Preferer un cookie de session si possible pour les identifiants sensibles.",
-        )
-
-    if highly_sensitive and isinstance(max_age, int) and max_age > 60 * 60 * 24 * 30:
-        _add_finding(
-            findings,
-            "CK-007",
-            "medium",
-            name,
-            f"Duree de vie longue pour un cookie sensible ({max_age}s).",
-            "Reduire Max-Age au strict necessaire.",
-        )
-
-    if (
-        domain
-        and source_host
-        and domain.startswith(".")
-        and not source_host.endswith(domain.lstrip(".").lower())
-    ):
-        _add_finding(
-            findings,
-            "CK-008",
-            "low",
-            name,
-            f"Portee domaine large ({domain}).",
-            "Si possible, restreindre Domain a l'hote le plus specifique.",
-        )
-
-    if highly_sensitive and path == "/":
-        _add_finding(
-            findings,
-            "CK-009",
-            "low",
-            name,
-            "Sensitive cookie path is root (/).",
-            "Restrict Path where possible.",
-        )
-
-    if size > 4096:
-        _add_finding(
-            findings,
-            "CK-010",
-            "medium",
-            name,
-            f"Taille de cookie elevee ({size} octets, > 4096).",
-            "Reduire la taille pour eviter troncature/rejet par navigateur ou proxy.",
-        )
-
-    if name.startswith("__Host-"):
-        if not secure or domain or path != "/":
-            _add_finding(
-                findings,
-                "CK-011",
-                "high",
-                name,
-                "Le prefixe __Host- est invalide (regles non respectees).",
-                "__Host- exige Secure, Path=/ et aucun attribut Domain.",
-                status="invalid",
-            )
-    if name.startswith("__Secure-") and not secure:
-        _add_finding(
-            findings,
-            "CK-012",
-            "high",
-            name,
-            "Le prefixe __Secure- est utilise sans Secure.",
-            "Ajouter Secure pour respecter les exigences du prefixe __Secure-.",
-            status="invalid",
-        )
-
-
-# ===============================================================
-# FUNCTION : scan_cookies_config()
-# ===============================================================
 def scan_cookies_config(url: str) -> dict:
-    result = {
-        "target_url": url,
-        "final_url": "",
-        "cookies": [],
-        "findings": [],
-        "summary": {
-            "total_cookies": 0,
-            "sensitive_cookies": 0,
-            "highly_sensitive_cookies": 0,
-            "total_findings": 0,
-            "severity_counts": {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0},
-            "max_severity": "info",
-            "comment": "",
-        },
-        "error": "",
-    }
+    result = init_cookies_result(url)
 
     normalized = normalize_url(url)
     result["target_url"] = normalized
@@ -432,104 +35,34 @@ def scan_cookies_config(url: str) -> dict:
         return result
 
     result["final_url"] = response.url
-    all_responses = list(response.history) + [response]
-
-    parsed_cookies = []
-    for resp in all_responses:
-        parsed_resp = urlparse(resp.url)
-        resp_scheme = (parsed_resp.scheme or "").lower()
-        resp_host = (parsed_resp.hostname or "").lower()
-        for line in _extract_set_cookie_headers(resp):
-            cookie = _parse_cookie_line(line)
-            if cookie is None:
-                continue
-            cookie["from_url"] = resp.url
-            cookie["source_scheme"] = resp_scheme
-            cookie["source_host"] = resp_host
-            parsed_cookies.append(cookie)
-
-    # Fallback: if response parser missed malformed lines, try SimpleCookie on merged header.
-    if not parsed_cookies:
-        merged = response.headers.get("Set-Cookie", "")
-        if merged:
-            tmp = SimpleCookie()
-            try:
-                tmp.load(merged)
-                for k, morsel in tmp.items():
-                    parsed_cookies.append(
-                        {
-                            "name": k,
-                            "value_len": len(morsel.value),
-                            "secure": bool(morsel["secure"]),
-                            "httponly": bool(morsel["httponly"]),
-                            "samesite": (morsel["samesite"] or "").lower(),
-                            "domain": morsel["domain"] or "",
-                            "path": morsel["path"] or "/",
-                            "max_age": _to_int(morsel["max-age"]),
-                            "expires": morsel["expires"] or "",
-                            "persistent": bool(morsel["expires"] or morsel["max-age"]),
-                            "size": len(str(morsel).encode("utf-8")),
-                            "priority": "",
-                            "partitioned": False,
-                            "raw": str(morsel),
-                            "from_url": response.url,
-                            "source_scheme": (urlparse(response.url).scheme or "").lower(),
-                            "source_host": (urlparse(response.url).hostname or "").lower(),
-                        }
-                    )
-            except Exception:
-                pass
-
-    parsed_cookies = _deduplicate_cookies(parsed_cookies)
+    cookies = collect_response_cookies(response)
 
     findings: list[dict] = []
-    for cookie in parsed_cookies:
-        _analyze_cookie_rules(cookie, findings)
+    for cookie in cookies:
+        analyze_cookie_rules(cookie, findings)
 
-    # duplicate cookie names with different domain/path scope
-    scopes_by_name: dict[str, set[tuple[str, str]]] = {}
-    for cookie in parsed_cookies:
-        name = cookie["name"]
-        scope = ((cookie.get("domain") or "").lower(), cookie.get("path") or "/")
-        scopes_by_name.setdefault(name, set()).add(scope)
+    add_scope_collision_findings(cookies, findings)
 
-    for name, scopes in scopes_by_name.items():
-        if len(scopes) > 1:
-            _add_finding(
-                findings,
-                "CK-013",
-                "low",
-                name,
-                "Meme nom de cookie utilise sur plusieurs scopes domain/path.",
-                "Uniformiser les scopes ou renommer les cookies pour eviter les collisions.",
-            )
+    for cookie in cookies:
+        cookie_findings = [finding for finding in findings if finding.get("cookie") == cookie.get("name")]
+        cookie["assessments"] = build_cookie_assessments(cookie, cookie_findings)
 
-    for cookie in parsed_cookies:
-        cookie_findings = [f for f in findings if f.get("cookie") == cookie.get("name")]
-        cookie["assessments"] = _build_cookie_assessments(cookie, cookie_findings)
+    sensitive_count, highly_sensitive_count = count_sensitive_cookies(cookies)
+    sorted_findings = sort_findings_by_severity(findings)
 
-    sensitive_count = 0
-    highly_sensitive_count = 0
-    for cookie in parsed_cookies:
-        highly_sensitive, _maybe_sensitive, sensitive = _cookie_sensitivity_flags(cookie.get("name", ""))
-        if sensitive:
-            sensitive_count += 1
-        if highly_sensitive:
-            highly_sensitive_count += 1
-
-    result["cookies"] = parsed_cookies
-    result["findings"] = findings
-    result["summary"]["total_cookies"] = len(parsed_cookies)
+    result["cookies"] = cookies
+    result["findings"] = sorted_findings
+    result["summary"]["total_cookies"] = len(cookies)
     result["summary"]["sensitive_cookies"] = sensitive_count
     result["summary"]["highly_sensitive_cookies"] = highly_sensitive_count
-    result["summary"]["total_findings"] = len(findings)
-    result["summary"]["severity_counts"] = _severity_counts(findings)
-    result["summary"]["max_severity"] = _max_severity(findings)
+    result["summary"]["cookie_count_risk"] = cookie_count_risk(len(cookies), sensitive_count)
+    result["summary"]["total_findings"] = len(sorted_findings)
+    result["summary"]["severity_counts"] = severity_counts(sorted_findings)
+    result["summary"]["max_severity"] = max_severity(sorted_findings)
     result["summary"]["comment"] = (
         "Aucun en-tete Set-Cookie detecte."
-        if not parsed_cookies
+        if not cookies
         else "Analyse cookies terminee."
     )
 
     return result
-

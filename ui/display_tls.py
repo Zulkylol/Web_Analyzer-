@@ -4,7 +4,7 @@
 # IMPORTS
 # ===============================================================
 from constants import SPACER, STATUS_ICON
-from utils.url import icon_for_risk
+from ui.icons import icon_for_risk
 
 
 # ===============================================================

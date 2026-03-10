@@ -9,6 +9,15 @@ import requests
 from bs4 import BeautifulSoup
 
 
+def evaluate_mixed_content_risk(mixed_detected: bool, mixed_level: str) -> str:
+    level = str(mixed_level or "").lower()
+    if level == "active":
+        return "HIGH"
+    if mixed_detected:
+        return "MEDIUM"
+    return "INFO"
+
+
 # ===============================================================
 # FUNCTION : detect_mixed_content
 # ===============================================================
