@@ -30,6 +30,7 @@ selected_language = "fr"
 def start_scan():
     _detached_by_tree.clear()
     clear_tables(http_table,ssl_table,cookies_table)
+    clear_tree(summary_table)
     url = url_entry.get().strip()
     if not url:
         messagebox.showwarning("Attention", "Veuillez entrer une URL")
@@ -155,8 +156,17 @@ def open_report():
     messagebox.showinfo("Report")
 
 
+def clear_tree(tree):
+    for item in tree.get_children():
+        tree.delete(item)
+
+
 def _is_alert_icon(icon: str) -> bool:
     return icon not in ("", STATUS_ICON["ok"], STATUS_ICON["info"])
+
+
+def _is_summary_risk(risk: str) -> bool:
+    return str(risk or "").strip().upper() in {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
 
 
 def apply_alert_filter_to_tree(tree, only_alerts: bool):
@@ -188,6 +198,41 @@ def _all_items_for_tree(tree):
     return list(tree.get_children()) + list(_detached_by_tree.get(tree_id, []))
 
 
+def refresh_summary_table():
+    clear_tree(summary_table)
+
+    source_tables = (
+        ("HTTP", http_table),
+        ("SSL/TLS", ssl_table),
+        ("Cookies", cookies_table),
+    )
+    row_idx = 0
+
+    for source_name, tree in source_tables:
+        for item in _all_items_for_tree(tree):
+            values = tree.item(item, "values") or ()
+            if len(values) < 5:
+                continue
+
+            param = values[0]
+            value = values[1]
+            check = values[2]
+            risk = str(values[3] or "").upper()
+            comment = values[4]
+
+            if not _is_summary_risk(risk):
+                continue
+
+            zebra_tag = "zebra_even" if row_idx % 2 == 0 else "zebra_odd"
+            summary_table.insert(
+                "",
+                "end",
+                values=(f"[{source_name}] {param}", value, check, risk, comment),
+                tags=(zebra_tag,),
+            )
+            row_idx += 1
+
+
 def refresh_summary_cards():
     total_rows = 0
     total_alerts = 0
@@ -196,13 +241,13 @@ def refresh_summary_cards():
     for tree in (http_table, ssl_table, cookies_table):
         for item in _all_items_for_tree(tree):
             values = tree.item(item, "values") or ()
-            if len(values) < 3:
+            if len(values) < 4:
                 continue
             total_rows += 1
-            icon = values[2]
-            if _is_alert_icon(icon):
+            risk = str(values[3] or "").strip().upper()
+            if _is_summary_risk(risk):
                 total_alerts += 1
-                if icon in (STATUS_ICON["high"], STATUS_ICON["missing"], STATUS_ICON["ko"], "âœ–"):
+                if risk in {"HIGH", "CRITICAL"}:
                     high_alerts += 1
 
     if high_alerts > 0:
@@ -216,6 +261,7 @@ def refresh_summary_cards():
     summary_alerts_var.set(str(total_alerts))
     summary_high_var.set(str(high_alerts))
     summary_risk_var.set(risk)
+    refresh_summary_table()
 
 
 def on_table_select(event):
@@ -352,17 +398,20 @@ ttk.Label(
     text="Astuce: sélectionne une ligne dans HTTP/SSL-TLS/Cookies pour voir le détail complet ci-dessous.",
 ).pack(anchor="w", padx=14, pady=(0, 10))
 
+summary_table = create_result_table(tab_summary, "Alertes consolidées")
+
 # Tables creation
 http_table = create_result_table(tab_http, "HTTP")
 ssl_table = create_result_table(tab_tls, "SSL/TLS")
 cookies_table = create_result_table(tab_cookies, "Cookies")
 
-for tree in (http_table, ssl_table, cookies_table):
+for tree in (summary_table, http_table, ssl_table, cookies_table):
     tree.tag_configure("zebra_even", background="#ffffff")
     tree.tag_configure("zebra_odd", background="#f3f6fa")
 
 cookies_table.tag_configure("cookie_name", font=("Helvetica", 10, "bold"))
 
+summary_table.bind("<<TreeviewSelect>>", on_table_select)
 http_table.bind("<<TreeviewSelect>>", on_table_select)
 ssl_table.bind("<<TreeviewSelect>>", on_table_select)
 cookies_table.bind("<<TreeviewSelect>>", on_table_select)   

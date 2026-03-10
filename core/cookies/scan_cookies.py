@@ -112,6 +112,38 @@ def _parse_cookie_line(set_cookie_line: str) -> dict | None:
     }
 
 
+def _cookie_sensitivity_flags(name: str) -> tuple[bool, bool, bool]:
+    name_l = name.lower().strip()
+    highly_sensitive = name_l in HIGHLY_SENSITIVE_COOKIE_NAMES
+    maybe_sensitive = bool(MAYBE_SENSITIVE_COOKIE_RE.search(name_l))
+    sensitive = highly_sensitive or maybe_sensitive
+    return highly_sensitive, maybe_sensitive, sensitive
+
+
+def _deduplicate_cookies(cookies: list[dict]) -> list[dict]:
+    deduped: list[dict] = []
+    seen: set[tuple] = set()
+
+    for cookie in cookies:
+        key = (
+            (cookie.get("name") or "").strip().lower(),
+            (cookie.get("domain") or "").strip().lower(),
+            (cookie.get("path") or "/").strip() or "/",
+            bool(cookie.get("secure")),
+            bool(cookie.get("httponly")),
+            (cookie.get("samesite") or "").strip().lower(),
+            cookie.get("max_age"),
+            bool(cookie.get("persistent")),
+            int(cookie.get("size", 0) or 0),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(cookie)
+
+    return deduped
+
+
 def _add_finding(
     findings: list[dict],
     rule_id: str,
@@ -218,10 +250,7 @@ def _analyze_cookie_rules(
     findings: list[dict],
 ) -> None:
     name = cookie["name"]
-    name_l = name.lower().strip()
-    highly_sensitive = name_l in HIGHLY_SENSITIVE_COOKIE_NAMES
-    maybe_sensitive = bool(MAYBE_SENSITIVE_COOKIE_RE.search(name_l))
-    sensitive = highly_sensitive or maybe_sensitive
+    highly_sensitive, _maybe_sensitive, sensitive = _cookie_sensitivity_flags(name)
     secure = bool(cookie["secure"])
     httponly = bool(cookie["httponly"])
     samesite = (cookie.get("samesite") or "").lower().strip()
@@ -378,6 +407,8 @@ def scan_cookies_config(url: str) -> dict:
         "findings": [],
         "summary": {
             "total_cookies": 0,
+            "sensitive_cookies": 0,
+            "highly_sensitive_cookies": 0,
             "total_findings": 0,
             "severity_counts": {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0},
             "max_severity": "info",
@@ -449,6 +480,8 @@ def scan_cookies_config(url: str) -> dict:
             except Exception:
                 pass
 
+    parsed_cookies = _deduplicate_cookies(parsed_cookies)
+
     findings: list[dict] = []
     for cookie in parsed_cookies:
         _analyze_cookie_rules(cookie, findings)
@@ -475,9 +508,20 @@ def scan_cookies_config(url: str) -> dict:
         cookie_findings = [f for f in findings if f.get("cookie") == cookie.get("name")]
         cookie["assessments"] = _build_cookie_assessments(cookie, cookie_findings)
 
+    sensitive_count = 0
+    highly_sensitive_count = 0
+    for cookie in parsed_cookies:
+        highly_sensitive, _maybe_sensitive, sensitive = _cookie_sensitivity_flags(cookie.get("name", ""))
+        if sensitive:
+            sensitive_count += 1
+        if highly_sensitive:
+            highly_sensitive_count += 1
+
     result["cookies"] = parsed_cookies
     result["findings"] = findings
     result["summary"]["total_cookies"] = len(parsed_cookies)
+    result["summary"]["sensitive_cookies"] = sensitive_count
+    result["summary"]["highly_sensitive_cookies"] = highly_sensitive_count
     result["summary"]["total_findings"] = len(findings)
     result["summary"]["severity_counts"] = _severity_counts(findings)
     result["summary"]["max_severity"] = _max_severity(findings)

@@ -3,8 +3,7 @@
 # ===============================================================
 # IMPORTS
 # ===============================================================
-from constants import SPACER, STATUS_ICON
-from utils.url import ck
+from constants import STATUS_ICON
 
 
 # ===============================================================
@@ -12,6 +11,7 @@ from utils.url import ck
 # ===============================================================
 def display_cookies(result, cookies_table):
     row_idx = 0
+    sev_rank = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
 
     def add_row(param, value="", check=STATUS_ICON["info"], comment="", risk="", extra_tags=()):
         nonlocal row_idx
@@ -24,8 +24,28 @@ def display_cookies(result, cookies_table):
     def yn(flag):
         return "oui" if bool(flag) else "non"
 
-    def icon_from_tri_state(status):
-        return ck(status)
+    def normalize_risk(risk):
+        risk_l = str(risk or "info").lower()
+        return risk_l if risk_l in sev_rank else "info"
+
+    def icon_from_risk(risk, ok_when_info=False):
+        risk_l = normalize_risk(risk)
+        if risk_l == "low":
+            return STATUS_ICON["low"]
+        if risk_l == "medium":
+            return STATUS_ICON["medium"]
+        if risk_l in {"critical", "high"}:
+            return STATUS_ICON["high"]
+        return STATUS_ICON["ok"] if ok_when_info else STATUS_ICON["info"]
+
+    def cookie_count_risk(total_cookies, sensitive_cookies):
+        if total_cookies <= 10:
+            return "info"
+        if total_cookies <= 20:
+            return "low"
+        if total_cookies <= 40:
+            return "medium" if sensitive_cookies >= 3 else "low"
+        return "high" if sensitive_cookies >= 5 else "medium"
 
     if not result:
         add_row("Cookies", "-", STATUS_ICON["warning"], "Aucun resultat cookie disponible.")
@@ -38,35 +58,40 @@ def display_cookies(result, cookies_table):
     summary = result.get("summary") or {}
     findings = result.get("findings") or []
     cookies = result.get("cookies") or []
+    total_cookies = int(summary.get("total_cookies", 0) or 0)
+    sensitive_cookies = int(summary.get("sensitive_cookies", 0) or 0)
+    cookie_count_risk_value = cookie_count_risk(total_cookies, sensitive_cookies)
+    max_severity = normalize_risk(summary.get("max_severity", "info"))
 
-    add_row("URL finale", result.get("final_url", ""), STATUS_ICON["info"], summary.get("comment", ""))
-    add_row("Nombre de cookies", str(summary.get("total_cookies", 0)), STATUS_ICON["info"], "")
-    add_row("Nombre d'alertes", str(summary.get("total_findings", 0)), STATUS_ICON["info"], "")
+    add_row(
+        "URL finale",
+        result.get("final_url", ""),
+        STATUS_ICON["info"],
+        summary.get("comment", ""),
+        risk="INFO",
+    )
+    add_row(
+        "Nombre de cookies",
+        str(total_cookies),
+        icon_from_risk(cookie_count_risk_value),
+        f"Cookies sensibles detectes: {sensitive_cookies}.",
+        risk=cookie_count_risk_value,
+    )
+    add_row(
+        "Nombre d'alertes",
+        str(summary.get("total_findings", 0)),
+        STATUS_ICON["info"],
+        "",
+        risk="INFO",
+    )
     add_row(
         "Severite max",
-        str(summary.get("max_severity", "info")).upper(),
-        STATUS_ICON["info"],
+        max_severity.upper(),
+        icon_from_risk(max_severity),
         "Niveau de risque le plus eleve detecte.",
+        risk=max_severity,
     )
 
-    sev_counts = summary.get("severity_counts") or {}
-    if sev_counts:
-        detail = (
-            f'critical={sev_counts.get("critical", 0)}, '
-            f'high={sev_counts.get("high", 0)}, '
-            f'medium={sev_counts.get("medium", 0)}, '
-            f'low={sev_counts.get("low", 0)}, '
-            f'info={sev_counts.get("info", 0)}'
-        )
-        add_row("Repartition", "", STATUS_ICON["info"], "Par severite: " + detail)
-
-    status_icon = {
-        "missing": STATUS_ICON["missing"],
-        "invalid": STATUS_ICON["warning"],
-        "warning": STATUS_ICON["warning"],
-        "info": STATUS_ICON["info"],
-    }
-    sev_rank = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
     findings_sorted = sorted(
         findings,
         key=lambda f: sev_rank.get(str(f.get("severity", "info")).lower(), -1),
@@ -81,7 +106,7 @@ def display_cookies(result, cookies_table):
             rule = finding.get("id", "")
             issue = finding.get("issue", "")
             rec = finding.get("recommendation", "")
-            icon = status_icon.get(str(finding.get("status", "warning")).lower(), STATUS_ICON["warning"])
+            icon = icon_from_risk(sev)
 
             add_row(param, cookie_name, icon, f"{rule} ({sev}) : {issue}", risk=sev)
             if rec:
@@ -105,67 +130,68 @@ def display_cookies(result, cookies_table):
             add_row(
                 "Cookie name",
                 name,
-                STATUS_ICON["info"],
+                icon_from_risk(assessments.get("name", {}).get("risk", "INFO")),
                 "",
                 risk=assessments.get("name", {}).get("risk", "INFO"),
                 extra_tags=("cookie_name",),
             )
+            secure_risk = assessments.get("secure", {}).get("risk", "INFO")
             add_row(
                 "Secure",
                 yn(c.get("secure")),
-                ck(bool(c.get("secure"))),
+                icon_from_risk(secure_risk, ok_when_info=bool(c.get("secure"))),
                 assessments.get("secure", {}).get("comment", ""),
-                risk=assessments.get("secure", {}).get("risk", "INFO"),
+                risk=secure_risk,
             )
+            httponly_risk = assessments.get("httponly", {}).get("risk", "INFO")
             add_row(
                 "HttpOnly",
                 yn(c.get("httponly")),
-                ck(bool(c.get("httponly"))),
+                icon_from_risk(httponly_risk, ok_when_info=bool(c.get("httponly"))),
                 assessments.get("httponly", {}).get("comment", ""),
-                risk=assessments.get("httponly", {}).get("risk", "INFO"),
+                risk=httponly_risk,
             )
 
-            if not samesite:
-                samesite_state = False
-            elif samesite in {"lax", "strict", "none"}:
-                samesite_state = True
-            else:
-                samesite_state = False
+            samesite_risk = assessments.get("samesite", {}).get("risk", "INFO")
             add_row(
                 "SameSite",
                 samesite_txt,
-                icon_from_tri_state(samesite_state),
+                icon_from_risk(samesite_risk, ok_when_info=bool(samesite and samesite in {"lax", "strict", "none"})),
                 assessments.get("samesite", {}).get("comment", ""),
-                risk=assessments.get("samesite", {}).get("risk", "INFO"),
+                risk=samesite_risk,
             )
 
+            domain_risk = assessments.get("domain", {}).get("risk", "INFO")
             add_row(
                 "Domain",
                 domain_txt,
-                STATUS_ICON["info"],
+                icon_from_risk(domain_risk),
                 assessments.get("domain", {}).get("comment", ""),
-                risk=assessments.get("domain", {}).get("risk", "INFO"),
+                risk=domain_risk,
             )
+            path_risk = assessments.get("path", {}).get("risk", "INFO")
             add_row(
                 "Path",
                 path_txt,
-                STATUS_ICON["info"],
+                icon_from_risk(path_risk),
                 assessments.get("path", {}).get("comment", ""),
-                risk=assessments.get("path", {}).get("risk", "INFO"),
+                risk=path_risk,
             )
+            type_risk = assessments.get("type", {}).get("risk", "INFO")
             add_row(
                 "Type",
                 persistence_txt,
-                STATUS_ICON["info"],
+                icon_from_risk(type_risk),
                 assessments.get("type", {}).get("comment", ""),
-                risk=assessments.get("type", {}).get("risk", "INFO"),
+                risk=type_risk,
             )
+            size_risk = assessments.get("size", {}).get("risk", "INFO")
             add_row(
                 "Size",
                 f"{size_txt} octets",
-                STATUS_ICON["info"],
+                icon_from_risk(size_risk),
                 assessments.get("size", {}).get("comment", ""),
-                risk=assessments.get("size", {}).get("risk", "INFO"),
+                risk=size_risk,
             )
             add_row(
                 "Source",

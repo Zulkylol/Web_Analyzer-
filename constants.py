@@ -43,9 +43,11 @@ SEV_ORDER = {
 STATUS_ICON = {
     "ok": "✅",
     "info": "ℹ️",
+    "low": "⚠️",
+    "medium": "❗",
     "weak": "⚠️",
-    "invalid": "⚠️",
-    "warning" : "⚠️",
+    "invalid": "❗",
+    "warning" : "❗",
     "missing": "❌",
     "ko" : "❌",
     "high" : "❌",

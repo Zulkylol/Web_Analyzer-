@@ -6,7 +6,7 @@
 from urllib.parse import urljoin
 
 from constants import STATUS_ICON
-from utils.url import ck
+from utils.url import icon_for_risk
 
 
 # ===============================================================
@@ -22,14 +22,6 @@ def display_http(result, http_table):
         http_table.insert("", "end", values=(param, value, check, risk_value, comment), tags=(zebra_tag,))
         row_idx += 1
 
-    def icon_for_risk(risk: str):
-        risk_u = str(risk or "").upper()
-        if risk_u == "HIGH":
-            return STATUS_ICON["high"]
-        if risk_u == "MEDIUM":
-            return STATUS_ICON["warning"]
-        return STATUS_ICON["info"]
-
     redirects = result.get("redirects") or {}
     mixed_urls = result.get("mixed_url") or []
 
@@ -40,7 +32,7 @@ def display_http(result, http_table):
     add_row(
         "Code de statut",
         str(result.get("status_code", "")),
-        ck(result["status_ok"]),
+        icon_for_risk(result.get("status_risk", "INFO"), ok_when_info=bool(result.get("status_ok"))),
         result.get("status_message", ""),
         risk=result.get("status_risk", "INFO"),
     )
@@ -50,7 +42,7 @@ def display_http(result, http_table):
         add_row(
             "Version HTTP",
             http_version,
-            ck(result["http_ok"]),
+            icon_for_risk(result.get("http_version_risk", "MEDIUM"), ok_when_info=bool(result.get("http_ok"))),
             result["http_comment"],
             risk=result.get("http_version_risk", "MEDIUM"),
         )
@@ -67,7 +59,7 @@ def display_http(result, http_table):
     add_row(
         "HTTPS active",
         result.get("https_value", "Oui" if uses_https else "Non"),
-        ck(result["uses_https"]),
+        icon_for_risk(result.get("https_risk", "MEDIUM"), ok_when_info=bool(result.get("uses_https"))),
         result.get("https_comment", ""),
         risk=result.get("https_risk", "MEDIUM"),
     )
@@ -76,7 +68,7 @@ def display_http(result, http_table):
     add_row(
         "URL finale",
         result.get("final_url", ""),
-        ck(result["url_ok"]),
+        icon_for_risk(result.get("url_risk", "INFO"), ok_when_info=bool(result.get("url_ok"))),
         result["url_comment"],
         risk=result.get("url_risk", "INFO"),
     )
@@ -84,7 +76,7 @@ def display_http(result, http_table):
     add_row(
         "Temps de reponse",
         result.get("time", 0.0),
-        ck(result["time_ok"]),
+        icon_for_risk(result.get("time_risk", "INFO"), ok_when_info=bool(result.get("time_ok"))),
         result["time_comment"],
         risk=result.get("time_risk", "INFO"),
     )
@@ -96,7 +88,7 @@ def display_http(result, http_table):
         add_row(
             "Contenu mixte",
             "Oui" if mixed else "Non",
-            STATUS_ICON["warning"] if mixed else STATUS_ICON["ok"],
+            icon_for_risk(mixed_risk, ok_when_info=not mixed),
             result.get("mixed_comment", ""),
             risk=mixed_risk,
         )
@@ -106,13 +98,13 @@ def display_http(result, http_table):
                 url_m, origin = item
             except Exception:
                 url_m, origin = str(item), ""
-            add_row("URL mixte" if i == 1 else "", url_m, STATUS_ICON["warning"], origin, risk=mixed_risk or "MEDIUM")
+            add_row("URL mixte" if i == 1 else "", url_m, icon_for_risk(mixed_risk or "MEDIUM"), origin, risk=mixed_risk or "MEDIUM")
 
     if result.get("header_findings"):
         for i, finding in enumerate(result["header_findings"], start=1):
             param = "Headers de securite" if i == 1 else ""
             header = finding["header"]
-            icon = STATUS_ICON.get(finding["status"], STATUS_ICON["info"])
+            icon = icon_for_risk(str(finding.get("severity", "")).upper())
             comment = str(finding.get("issue", ""))
             add_row(param, header, icon, comment, risk=str(finding.get("severity", "")).upper())
 
@@ -124,7 +116,7 @@ def display_http(result, http_table):
     add_row(
         "Nombre de redirections",
         str(num_redir),
-        ck(redirects.get("num_ok")),
+        icon_for_risk(redir_risk, ok_when_info=bool(redirects.get("num_ok"))),
         redirects.get("num_comment", ""),
         risk=redir_risk,
     )
@@ -150,9 +142,9 @@ def display_http(result, http_table):
 
     r_ips = redirects.get("redirect_ips") or []
     if r_ips:
-        add_row("IPs de redirection", r_ips[0], STATUS_ICON["warning"], redirects.get("ri_comment", ""), risk="MEDIUM")
+        add_row("IPs de redirection", r_ips[0], icon_for_risk("MEDIUM"), redirects.get("ri_comment", ""), risk="MEDIUM")
         for ip in r_ips[1:]:
-            add_row("", ip, STATUS_ICON["warning"], "", risk="MEDIUM")
+            add_row("", ip, icon_for_risk("MEDIUM"), "", risk="MEDIUM")
 
     r_chain = redirects.get("redirect_chain") or []
     if r_chain:

@@ -4,7 +4,7 @@
 # IMPORTS
 # ===============================================================
 from constants import SPACER, STATUS_ICON
-from utils.url import ck
+from utils.url import icon_for_risk
 
 
 # ===============================================================
@@ -28,14 +28,14 @@ def display_ssl_tls(result, ssl_table):
     tls = result["tls"]
     trust = result["trust"]
 
-    add("Nom", cert["subject"]["common_name"], risk=r("name"))
+    add("Nom", cert["subject"]["common_name"], icon_for_risk(r("name")), risk=r("name"))
 
     san = cert["subject"]["san_dns"]
     if san:
         add(
             "Subject Alternative Name",
             san[0],
-            ck(result["hostname_check"]["match"]),
+            icon_for_risk(r("san"), ok_when_info=bool(result["hostname_check"]["match"])),
             SPACER + result["hostname_check"]["comment"],
             risk=r("san"),
         )
@@ -53,7 +53,7 @@ def display_ssl_tls(result, ssl_table):
     add(
         "Nombre de SAN",
         len(san),
-        ck(result["hostname_check"]["ok"]),
+        icon_for_risk(r("san_count"), ok_when_info=bool(result["hostname_check"]["ok"])),
         SPACER + result["hostname_check"]["warnings"]["multi_domain"],
         risk=r("san_count"),
     )
@@ -61,14 +61,14 @@ def display_ssl_tls(result, ssl_table):
     add(
         "Debut de validite",
         cert["validity"]["not_before"],
-        ck(cert["validity"]["is_valid_now"]),
+        icon_for_risk(r("valid_from"), ok_when_info=bool(cert["validity"]["is_valid_now"])),
         SPACER + ("Certificat valide" if cert["validity"]["is_valid_now"] else "Certificat expire"),
         risk=r("valid_from"),
     )
     add(
         "Fin de validite",
         cert["validity"]["not_after"],
-        ck(cert["validity"]["expires_ok"]),
+        icon_for_risk(r("valid_to"), ok_when_info=bool(cert["validity"]["expires_ok"])),
         SPACER + cert["validity"]["expires_soon_comment"],
         risk=r("valid_to"),
     )
@@ -76,38 +76,38 @@ def display_ssl_tls(result, ssl_table):
     add(
         "Version du certificat",
         cert["version"]["id"],
-        ck(cert["version"]["ok"]),
+        icon_for_risk(r("cert_version"), ok_when_info=bool(cert["version"]["ok"])),
         SPACER + cert["version"]["comment"],
         risk=r("cert_version"),
     )
     add(
         "Serial number",
         cert["serial"]["hex"],
-        ck(cert["serial"]["ok"]),
+        icon_for_risk(r("serial"), ok_when_info=bool(cert["serial"]["ok"])),
         SPACER + cert["serial"]["comment"],
         risk=r("serial"),
     )
     add(
         "Algorithme",
         cert["signature"]["hash_algorithm"],
-        ck(cert["signature"]["ok"]),
+        icon_for_risk(r("signature"), ok_when_info=bool(cert["signature"]["ok"])),
         SPACER + cert["signature"]["comment"],
         risk=r("signature"),
     )
 
-    add("Empreinte", cert["signature"]["fingerprint_sha256"], STATUS_ICON["info"], risk=r("fingerprint"))
+    add("Empreinte", cert["signature"]["fingerprint_sha256"], icon_for_risk(r("fingerprint")), risk=r("fingerprint"))
 
     add(
         "Autorite certifiante",
         cert["issuer"]["common_name"],
-        ck(trust["is_trusted"]),
+        icon_for_risk(r("authority"), ok_when_info=bool(trust["is_trusted"])),
         SPACER + ("Autorite reconnue" if trust["is_trusted"] else "Autorite non reconnue"),
         risk=r("authority"),
     )
     add(
         "Auto-signe",
         trust["is_self_signed"],
-        STATUS_ICON["ko"] if trust["is_self_signed"] else STATUS_ICON["ok"],
+        icon_for_risk(r("self_signed"), ok_when_info=not trust["is_self_signed"]),
         SPACER + ("Certificat autosigne" if trust["is_self_signed"] else "Certificat non autosigne"),
         risk=r("self_signed"),
     )
@@ -115,7 +115,7 @@ def display_ssl_tls(result, ssl_table):
     add(
         "Cle publique",
         cert["public_key"].get("summary", ""),
-        ck(cert["public_key"]["ok"]),
+        icon_for_risk(r("public_key"), ok_when_info=bool(cert["public_key"]["ok"])),
         SPACER + cert["public_key"]["comment"],
         risk=r("public_key"),
     )
@@ -123,28 +123,28 @@ def display_ssl_tls(result, ssl_table):
     add(
         "Basic constraints",
         cert["extensions"]["basic_constraints"],
-        ck(cert["extensions"]["basic_constraints_ok"]),
+        icon_for_risk(r("basic_constraints"), ok_when_info=bool(cert["extensions"]["basic_constraints_ok"])),
         SPACER + cert["extensions"]["basic_constraints_comment"],
         risk=r("basic_constraints"),
     )
     add(
         "KU etendu",
         cert["extensions"]["extended_key_usage"],
-        ck(cert["extensions"]["eku_ok"]),
+        icon_for_risk(r("eku"), ok_when_info=bool(cert["extensions"]["eku_ok"])),
         SPACER + cert["extensions"]["eku_comment"],
         risk=r("eku"),
     )
     add(
         "Key usage (KU)",
         cert["extensions"]["key_usage"],
-        ck(cert["extensions"]["ku_ok"]),
+        icon_for_risk(r("ku"), ok_when_info=bool(cert["extensions"]["ku_ok"])),
         SPACER + cert["extensions"]["ku_comment"],
         risk=r("ku"),
     )
     add(
         "Liste de revocation",
         cert["extensions"]["crl_distribution_points"],
-        ck(cert["extensions"]["crl_ok"]),
+        icon_for_risk(r("crl"), ok_when_info=bool(cert["extensions"]["crl_ok"])),
         SPACER + cert["extensions"]["crl_comment"],
         risk=r("crl"),
     )
@@ -152,7 +152,7 @@ def display_ssl_tls(result, ssl_table):
     add(
         "Version TLS",
         tls["negotiated_version"],
-        ck(tls["nv_ok"]),
+        icon_for_risk(r("tls_version"), ok_when_info=bool(tls["nv_ok"])),
         SPACER + tls["nv_comment"],
         risk=r("tls_version"),
     )
@@ -161,9 +161,9 @@ def display_ssl_tls(result, ssl_table):
         s = tls["supported_versions"]
         for v in ["TLS1.0", "TLS1.1", "TLS1.2", "TLS1.3"]:
             if v in ["TLS1.0", "TLS1.1"]:
-                check_icon = STATUS_ICON["ko"] if s[v] else STATUS_ICON["ok"]
+                check_icon = icon_for_risk(r(f"support_{v.lower().replace('.', '')}"), ok_when_info=not s[v])
             else:
-                check_icon = ck(s[v])
+                check_icon = icon_for_risk(r(f"support_{v.lower().replace('.', '')}"), ok_when_info=bool(s[v]))
             risk_key = f"support_{v.lower().replace('.', '')}"
             add(
                 f"Support {v}",
@@ -183,7 +183,7 @@ def display_ssl_tls(result, ssl_table):
     add(
         "Politique TLS",
         "OK" if tls["policy"]["ok"] else "KO",
-        ck(tls["policy"]["ok"]),
+        icon_for_risk(r("tls_policy"), ok_when_info=bool(tls["policy"]["ok"])),
         SPACER + tls["policy"]["comment"],
         risk=r("tls_policy"),
     )
@@ -191,16 +191,16 @@ def display_ssl_tls(result, ssl_table):
     add(
         "Cipher Suite",
         tls["cipher"]["name"],
-        ck(tls["cipher"]["ok"]),
+        icon_for_risk(r("cipher"), ok_when_info=bool(tls["cipher"]["ok"])),
         SPACER + tls["cipher"]["comment"],
         risk=r("cipher"),
     )
-    add("Taille de cle (bits)", tls["cipher"]["bits"], STATUS_ICON["info"], risk=r("cipher_bits"))
+    add("Taille de cle (bits)", tls["cipher"]["bits"], icon_for_risk(r("cipher_bits")), risk=r("cipher_bits"))
 
     add(
         "Ciphers faibles (legacy)",
         "OK" if tls.get("weak_cipher_ok") else "Faible" if tls.get("weak_cipher_ok") is False else "Non teste",
-        ck(tls.get("weak_cipher_ok")),
+        icon_for_risk(r("weak_ciphers"), ok_when_info=bool(tls.get("weak_cipher_ok"))),
         SPACER + tls.get("weak_cipher_comment", ""),
         risk=r("weak_ciphers"),
     )
