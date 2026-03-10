@@ -43,6 +43,7 @@ def analyze_metadata(result: dict, x509_cert: x509.Certificate) -> None:
     sn = x509_cert.serial_number
     bitlen = sn.bit_length()
     cert_serial["hex"] = hex(sn)
+    cert_serial["bitlen"] = bitlen
 
     if sn <= 0:
         cert_serial["ok"] = False

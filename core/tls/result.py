@@ -25,7 +25,7 @@ def init_tls_result() -> dict:
                 "expires_ok": False,
                 "expires_soon_comment": "",
             },
-            "serial": {"hex": "", "ok": True, "comment": ""},
+            "serial": {"hex": "", "ok": True, "comment": "", "bitlen": 0},
             "signature": {
                 "hash_algorithm": "",
                 "fingerprint_sha256": "",

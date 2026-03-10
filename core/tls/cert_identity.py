@@ -7,6 +7,35 @@ from __future__ import annotations
 from cryptography import x509
 from cryptography.x509.oid import NameOID
 
+
+def _normalize_dns_name(value: str) -> str:
+    """Normalize DNS names for safe comparison."""
+    return str(value or "").strip().rstrip(".").lower()
+
+
+def _dns_name_matches(pattern: str, hostname: str) -> bool:
+    """
+    Match hostname against cert identity with strict wildcard handling.
+
+    Accepted wildcard form: "*.example.com" (left-most label only),
+    matching exactly one subdomain label.
+    """
+    p = _normalize_dns_name(pattern)
+    h = _normalize_dns_name(hostname)
+    if not p or not h:
+        return False
+
+    if p.startswith("*."):
+        suffix = p[2:]
+        if not suffix or "." not in suffix:
+            return False
+        if not h.endswith("." + suffix):
+            return False
+        return h.count(".") == suffix.count(".") + 1
+
+    return p == h
+
+
 # ===============================================================
 # FUNCTION : analyze_identity()
 # ===============================================================
@@ -54,11 +83,7 @@ def analyze_identity(result: dict, x509_cert: x509.Certificate, hostname_for_mat
     san_list = [cn] + cert_subject["san_dns"]
     match = False
     for entry in san_list:
-        if entry.startswith("*."):
-            if hostname_for_match.endswith(entry[1:]):
-                match = True
-                break
-        elif entry == hostname_for_match:
+        if _dns_name_matches(entry, hostname_for_match):
             match = True
             break
 
