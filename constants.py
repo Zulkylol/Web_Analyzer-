@@ -6,7 +6,7 @@ SECURITY_HEADERS = {
     "X-Frame-Options": "medium",
     "X-Content-Type-Options": "low",
     "Referrer-Policy": "low",
-    "Permissions-Policy": "info",
+    "Permissions-Policy": "low",
 }
 
 HEADER = {
@@ -24,6 +24,7 @@ CSP_WEAK_TOKENS = (
 
 GOOD_REFERRER = {
     "no-referrer", 
+    "same-origin",
     "strict-origin", 
     "strict-origin-when-cross-origin"
     }

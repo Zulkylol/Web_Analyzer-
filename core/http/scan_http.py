@@ -11,6 +11,7 @@ from core.http.errors import map_http_scan_error
 from core.http.exposure import scan_exposed_methods, scan_standard_files
 from core.http.headers_security import scan_security_headers
 from core.http.mixed_content import detect_mixed_content, evaluate_mixed_content_risk
+from core.http.report import build_http_report
 from core.http.redirects import scan_redirections
 from core.http.response_analysis import (
     adjust_url_risk_with_https_posture,
@@ -119,5 +120,7 @@ def scan_http_config(url: str) -> dict:
 
     except Exception as exc:
         result["comment"] = map_http_scan_error(exc)
+        result["errors"]["message"] = result["comment"]
 
+    result["report"] = build_http_report(result)
     return result

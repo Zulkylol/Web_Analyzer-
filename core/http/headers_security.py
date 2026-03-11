@@ -135,7 +135,7 @@ def scan_security_headers(
                     "Strict-Transport-Security",
                     "weak",
                     "low",
-                    "HSTS sans includeSubDomains",
+                    "HSTS sans includeSubDomains (sous-domaines possiblement non protégés contre le downgrade/MITM)",
                     "Ajouter includeSubDomains si possible (attention aux sous-domaines non-HTTPS)",
                     hsts,
                 )
@@ -175,7 +175,7 @@ def scan_security_headers(
                     "Content-Security-Policy",
                     "weak",
                     _lower_sev(expected("Content-Security-Policy")),
-                    "CSP contient unsafe-inline et/ou unsafe-eval",
+                    "CSP contient unsafe-inline et/ou unsafe-eval (affaiblit la protection contre l'injection de code)",
                     "Durcir la CSP en interdisant les scripts inline et l'évaluation dynamique ('unsafe-inline', 'unsafe-eval')",
                     active_value,
                 )
@@ -232,7 +232,7 @@ def scan_security_headers(
         else:
             v = xfo.strip().upper()
             if v in {"DENY", "SAMEORIGIN"}:
-                add("X-Frame-Options", "ok", "info", "X-Frame-Options correct.", "", xfo)
+                add("X-Frame-Options", "ok", "info", "X-Frame-Options correctement configuré", "", xfo)
             else:
                 add(
                     "X-Frame-Options",
@@ -252,12 +252,12 @@ def scan_security_headers(
                 "missing",
                 expected("X-Content-Type-Options"),
                 "Protection contre MIME sniffing absente.",
-                "Ajouter: X-Content-Type-Options: nosniff",
+                "Ajouter: X-Content-Type-Options: Nosniff",
                 None,
             )
         else:
             if xcto.lower() == "nosniff":
-                add("X-Content-Type-Options", "ok", "info", "nosniff correct.", "", xcto)
+                add("X-Content-Type-Options", "ok", "info", "X-Content-Type-Options : nosniff correctement configuré", "", xcto)
             else:
                 add(
                     "X-Content-Type-Options",
@@ -283,7 +283,7 @@ def scan_security_headers(
         else:
             v = rp.split(",")[0].strip().lower()
             if v in GOOD_REFERRER:
-                add("Referrer-Policy", "ok", "info", "Referrer-Policy correcte.", "", rp)
+                add("Referrer-Policy", "ok", "info", "Referrer-Policy correctement configuré", "", rp)
             elif v in WEAK_REFERRER:
                 add(
                     "Referrer-Policy",
@@ -339,7 +339,7 @@ def scan_security_headers(
                         pp,
                     )
                 else:
-                    add("Permissions-Policy", "ok", "info", "Permissions-Policy présente (OK)", "", pp)
+                    add("Permissions-Policy", "ok", "info", "Permissions-Policy présente, sans features sensibles autorisées", "", pp)
 
     missing_headers = [f["header"] for f in findings if f["status"] == "missing"]
     return missing_headers, findings

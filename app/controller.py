@@ -8,6 +8,7 @@ from core.cookies.scan_cookies import scan_cookies_config
 from core.http.scan_http import scan_http_config
 from core.tls.scan_tls import scan_tls_config
 from ui.app_window import build_main_window
+from ui.display_common import display_report_rows
 from ui.display_cookies import display_cookies
 from ui.display_http import display_http
 from ui.display_tls import display_ssl_tls
@@ -18,6 +19,22 @@ class WebAnalyzerApp:
     def __init__(self) -> None:
         self.selected_language = "fr"
         self.settings_window = None
+        self.scan_results = {
+            "HTTP": None,
+            "SSL/TLS": None,
+            "Cookies": None,
+        }
+
+        self._progress_lock = threading.Lock()
+        self._progress_plan = {}
+        self._progress_target_value = 0.0
+        self._progress_running = False
+        self._progress_phase_active = False
+        self._progress_phase_start_value = 0.0
+        self._progress_phase_end_value = 0.0
+        self._progress_phase_started_at = 0.0
+        self._progress_phase_expected_seconds = 1.0
+        self._progress_animation_job = None
 
         ui_refs = build_main_window(
             self.launch_scan,
@@ -59,6 +76,11 @@ class WebAnalyzerApp:
     def launch_scan(self) -> None:
         clear_tables(self.http_table, self.ssl_table, self.cookies_table)
         self.clear_tree(self.summary_table)
+        self.scan_results = {
+            "HTTP": None,
+            "SSL/TLS": None,
+            "Cookies": None,
+        }
 
         input_url = self.url_entry.get().strip()
         if not input_url:
@@ -73,31 +95,36 @@ class WebAnalyzerApp:
 
         self.go_button.config(state="disabled")
         self.open_report_button.config(state="disabled")
-        self.progress_bar["value"] = 0
-        self.root.update_idletasks()
+        self.start_progress_tracking()
 
         threading.Thread(target=self.scan_in_background, args=(url,), daemon=True).start()
 
     def scan_in_background(self, url: str) -> None:
         try:
-            self.update_progress(5, steps=8)
+            self.set_progress_target(6)
 
             result_http = None
             if self.scan_http_var.get():
-                self.update_progress(20, steps=14)
+                self.start_progress_phase("HTTP")
                 result_http = scan_http_config(url)
+                self.complete_progress_phase("HTTP")
+            self.scan_results["HTTP"] = result_http
 
             result_tls = None
             if self.scan_tls_var.get():
-                self.update_progress(40, steps=16)
+                self.start_progress_phase("SSL/TLS")
                 result_tls = scan_tls_config(url)
+                self.complete_progress_phase("SSL/TLS")
+            self.scan_results["SSL/TLS"] = result_tls
 
             result_cookies = None
             if self.scan_cookies_var.get():
-                self.update_progress(60, steps=14)
+                self.start_progress_phase("Cookies")
                 result_cookies = scan_cookies_config(url)
+                self.complete_progress_phase("Cookies")
+            self.scan_results["Cookies"] = result_cookies
 
-            self.update_progress(80, steps=14)
+            self.set_progress_target(self._progress_plan.get("after_scans", 82.0))
             if self.scan_http_var.get() and result_http is not None:
                 display_http(result_http, self.http_table)
             if self.scan_tls_var.get() and result_tls is not None:
@@ -106,33 +133,150 @@ class WebAnalyzerApp:
                 display_cookies(result_cookies, self.cookies_table)
 
             self.refresh_summary_cards()
-            self.update_progress(90, steps=10)
-            self.update_progress(100, steps=12)
+            self.set_progress_target(self._progress_plan.get("summary", 92.0))
 
         except Exception as exc:
             messagebox.showerror("Erreur", f"Erreur pendant le scan : {exc}")
 
         finally:
-            messagebox.showinfo("Terminé", "Scan terminé !")
+            self.finish_progress_tracking()
+            time.sleep(0.35)
             self.open_report_button.config(state="normal")
             self.go_button.config(state="normal")
 
     def update_progress(self, value, steps=12, delay=0.008) -> None:
-        current = float(self.progress_bar["value"])
-        target = float(value)
-        if steps <= 1:
-            self.progress_bar["value"] = target
-            self.root.update_idletasks()
+        self.set_progress_target(value)
+
+    def build_progress_plan(self) -> dict:
+        enabled_phases = []
+        if self.scan_http_var.get():
+            enabled_phases.append(("HTTP", 5.0, 6.0))
+        if self.scan_tls_var.get():
+            enabled_phases.append(("SSL/TLS", 3.0, 3.5))
+        if self.scan_cookies_var.get():
+            enabled_phases.append(("Cookies", 2.0, 2.5))
+
+        start_value = 6.0
+        scan_budget = 74.0
+        total_weight = sum(weight for _, weight, _ in enabled_phases) or 1.0
+        cursor = start_value
+        phases = {}
+
+        for phase_name, weight, expected_seconds in enabled_phases:
+            span = scan_budget * (weight / total_weight)
+            phases[phase_name] = {
+                "start": cursor,
+                "end": cursor + span,
+                "expected_seconds": expected_seconds,
+            }
+            cursor += span
+
+        return {
+            "phases": phases,
+            "after_scans": max(cursor, 82.0),
+            "summary": 92.0,
+            "finish": 100.0,
+        }
+
+    def reset_progress_tracking(self) -> None:
+        if self._progress_animation_job is not None:
+            try:
+                self.root.after_cancel(self._progress_animation_job)
+            except Exception:
+                pass
+            self._progress_animation_job = None
+
+        with self._progress_lock:
+            self._progress_plan = {}
+            self._progress_target_value = 0.0
+            self._progress_running = False
+            self._progress_phase_active = False
+            self._progress_phase_start_value = 0.0
+            self._progress_phase_end_value = 0.0
+            self._progress_phase_started_at = 0.0
+            self._progress_phase_expected_seconds = 1.0
+
+        self.progress_bar["value"] = 0
+        self.progress_bar.configure(bootstyle="warning-striped")
+        self.root.update_idletasks()
+
+    def start_progress_tracking(self) -> None:
+        self.reset_progress_tracking()
+        with self._progress_lock:
+            self._progress_plan = self.build_progress_plan()
+            self._progress_running = True
+            self._progress_target_value = 0.0
+        self.schedule_progress_animation()
+
+    def finish_progress_tracking(self) -> None:
+        with self._progress_lock:
+            self._progress_target_value = float(self._progress_plan.get("finish", 100.0))
+            self._progress_running = False
+            self._progress_phase_active = False
+
+    def set_progress_target(self, value: float) -> None:
+        with self._progress_lock:
+            self._progress_target_value = max(float(value), self._progress_target_value)
+
+    def start_progress_phase(self, phase_name: str) -> None:
+        phase = self._progress_plan.get("phases", {}).get(phase_name)
+        if not phase:
             return
 
-        delta = (target - current) / steps
-        for _ in range(steps):
-            current += delta
+        with self._progress_lock:
+            self._progress_target_value = max(float(phase["start"]), self._progress_target_value)
+            self._progress_phase_active = True
+            self._progress_phase_start_value = float(phase["start"])
+            self._progress_phase_end_value = float(phase["end"])
+            self._progress_phase_started_at = time.monotonic()
+            self._progress_phase_expected_seconds = float(phase["expected_seconds"])
+
+    def complete_progress_phase(self, phase_name: str) -> None:
+        phase = self._progress_plan.get("phases", {}).get(phase_name)
+        if not phase:
+            return
+
+        with self._progress_lock:
+            self._progress_target_value = max(float(phase["end"]), self._progress_target_value)
+            self._progress_phase_active = False
+
+    def schedule_progress_animation(self) -> None:
+        if self._progress_animation_job is None:
+            self._tick_progress_animation()
+
+    def _tick_progress_animation(self) -> None:
+        with self._progress_lock:
+            target = self._progress_target_value
+            running = self._progress_running
+            phase_active = self._progress_phase_active
+            phase_start = self._progress_phase_start_value
+            phase_end = self._progress_phase_end_value
+            phase_started_at = self._progress_phase_started_at
+            expected_seconds = self._progress_phase_expected_seconds
+
+        if phase_active:
+            span = max(0.0, phase_end - phase_start)
+            elapsed = max(0.0, time.monotonic() - phase_started_at)
+            ratio = min(elapsed / max(expected_seconds, 0.5), 0.92)
+            target = max(target, phase_start + span * ratio)
+
+        current = float(self.progress_bar["value"])
+        if target > current:
+            speed = 0.28 if not running else 0.16
+            max_step = 5.0 if not running else 2.8
+            step = max(0.25, min(max_step, (target - current) * speed))
+            current = min(target, current + step)
             self.progress_bar["value"] = current
             self.root.update_idletasks()
-            time.sleep(delay)
-        self.progress_bar["value"] = target
-        self.root.update_idletasks()
+
+        if not running and current >= target - 0.1:
+            self.progress_bar["value"] = target
+            self.progress_bar.configure(bootstyle="success-striped")
+            self.root.update_idletasks()
+            self._progress_animation_job = None
+            return
+
+        self._progress_animation_job = self.root.after(33, self._tick_progress_animation)
 
     def open_settings(self) -> None:
         if self.settings_window is not None and self.settings_window.winfo_exists():
@@ -215,81 +359,24 @@ class WebAnalyzerApp:
     def is_summary_risk(self, risk: str) -> bool:
         return str(risk or "").strip().upper() in {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
 
-    def include_in_summary(self, source_name: str, param: str) -> bool:
-        param_text = str(param or "")
-        if source_name == "Cookies":
-            return param_text.startswith("Alerte cookie #")
-        if source_name == "HTTP" and not param_text.strip():
-            return False
-        return True
-
     def refresh_summary_table(self) -> None:
         self.clear_tree(self.summary_table)
-
-        source_tables = (
-            ("HTTP", self.http_table),
-            ("SSL/TLS", self.ssl_table),
-            ("Cookies", self.cookies_table),
-        )
-        row_idx = 0
-
-        for source_name, tree in source_tables:
-            items = list(tree.get_children())
-            idx = 0
-            while idx < len(items):
-                item = items[idx]
-                values = tree.item(item, "values") or ()
-                if len(values) < 5:
-                    idx += 1
-                    continue
-
-                param = values[0]
-                value = values[1]
-                check = values[2]
-                risk = str(values[3] or "").upper()
-                comment = values[4]
-
-                if source_name == "HTTP" and param == "Domaines de redirection":
-                    last_value = value
-                    last_check = check
-                    last_risk = risk
-                    last_comment = comment
-                    look_ahead = idx + 1
-                    while look_ahead < len(items):
-                        next_values = tree.item(items[look_ahead], "values") or ()
-                        if len(next_values) < 5:
-                            look_ahead += 1
-                            continue
-                        next_param = str(next_values[0] or "")
-                        if next_param.strip():
-                            break
-                        last_value = next_values[1]
-                        last_check = next_values[2]
-                        last_risk = str(next_values[3] or "").upper()
-                        last_comment = next_values[4]
-                        look_ahead += 1
-                    value = last_value
-                    check = last_check
-                    risk = last_risk
-                    comment = last_comment
-                    idx = look_ahead - 1
-
+        summary_rows = []
+        for source_name, result in self.scan_results.items():
+            report = (result or {}).get("report", {})
+            for finding in report.get("findings", []):
+                risk = str(finding.get("risk", "")).upper()
                 if not self.is_summary_risk(risk):
-                    idx += 1
                     continue
-                if not self.include_in_summary(source_name, param):
-                    idx += 1
-                    continue
-
-                zebra_tag = "zebra_even" if row_idx % 2 == 0 else "zebra_odd"
-                self.summary_table.insert(
-                    "",
-                    "end",
-                    values=(f"[{source_name}] {param}", value, check, risk, comment),
-                    tags=(zebra_tag,),
+                summary_rows.append(
+                    {
+                        **finding,
+                        "param": f"[{source_name}] {finding.get('param', '')}",
+                        "tags": [],
+                    }
                 )
-                row_idx += 1
-                idx += 1
+
+        display_report_rows({"rows": summary_rows}, self.summary_table)
 
     def refresh_summary_cards(self) -> None:
         self.refresh_summary_table()
@@ -299,20 +386,13 @@ class WebAnalyzerApp:
         high_alerts = 0
         medium_alerts = 0
 
-        for tree in (self.http_table, self.ssl_table, self.cookies_table):
-            total_rows += len(tree.get_children())
-
-        for item in self.summary_table.get_children():
-            values = self.summary_table.item(item, "values") or ()
-            if len(values) < 4:
-                continue
-            risk = str(values[3] or "").strip().upper()
-            if self.is_summary_risk(risk):
-                total_alerts += 1
-                if risk in {"HIGH", "CRITICAL"}:
-                    high_alerts += 1
-                elif risk == "MEDIUM":
-                    medium_alerts += 1
+        for result in self.scan_results.values():
+            report = (result or {}).get("report", {})
+            report_summary = report.get("summary", {})
+            total_rows += int(report_summary.get("total_rows", 0) or 0)
+            total_alerts += int(report_summary.get("total_findings", 0) or 0)
+            high_alerts += int(report_summary.get("high_findings", 0) or 0)
+            medium_alerts += int(report_summary.get("medium_findings", 0) or 0)
 
         if high_alerts > 0:
             risk = "ELEVE"
@@ -338,7 +418,8 @@ class WebAnalyzerApp:
         value = values[1] if len(values) > 1 else ""
         check = values[2] if len(values) > 2 else ""
         risk = values[3] if len(values) > 3 else ""
-        comment = values[4] if len(values) > 4 else ""
+        comment = getattr(tree, "_row_comments", {}).get(selected[0], values[4] if len(values) > 4 else "")
+        comment = str(comment or "").strip()
 
         self.details_text.config(state="normal")
         self.details_text.delete("1.0", "end")
@@ -348,6 +429,6 @@ class WebAnalyzerApp:
             f"Valeur: {value}\n"
             f"Check: {check}\n"
             f"Risque: {risk}\n"
-            f"Commentaire:\n{comment}",
+            f"Commentaire: {comment}",
         )
         self.details_text.config(state="disabled")

@@ -55,11 +55,12 @@ def scan_standard_files(
                     }
                 )
             else:
+                risk = "INFO" if label == "robots.txt" else "LOW"
                 findings.append(
                     {
                         "name": label,
                         "value": f"Missing ({code})",
-                        "risk": "LOW",
+                        "risk": risk,
                         "comment": f"{path} introuvable",
                         "url": str(getattr(resp, "url", "") or url),
                     }

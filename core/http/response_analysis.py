@@ -171,9 +171,9 @@ def evaluate_https_posture(
 
     if uses_https:
         if redirect_upgrade:
-            https_comment = "HTTP redirige vers HTTPS (upgrade detecte)."
+            https_comment = "HTTP redirige vers HTTPS (upgrade détecté)"
         else:
-            https_comment = "HTTPS actif sur l'URL finale."
+            https_comment = "HTTPS actif sur l'URL finale"
         https_value = "Oui"
         https_risk = "INFO"
     elif https_probe_ok:

@@ -26,7 +26,7 @@ def create_result_table(parent, title):
     """
     Create and return a styled result table (Treeview) with predefined columns and scrollbar.
     """
-    frame = ttk.LabelFrame(parent, text=title)
+    frame = ttk.LabelFrame(parent, text=title, font=("Helvetica", 11, "bold"))
     frame.pack(side="left", padx=5, pady=5, fill="both", expand=True)
 
     # -------------------- COLUMNS ---------------------
@@ -36,14 +36,14 @@ def create_result_table(parent, title):
     # ------------------ COLUMNS NAME ------------------
     tree.heading("param", text="Paramètre")
     tree.heading("value", text="Valeur")
-    tree.heading("check", text="Check")
+    tree.heading("check", text="État")
     tree.heading("risk", text="Risque")
     tree.heading("comment", text="Commentaire")
     
     # ---------------- WIDTH + ALIGNEMENT --------------
     tree.column("param", width=220, anchor="w", stretch=False)
     tree.column("value", width=200, anchor="w", stretch=False)
-    tree.column("check", width=60, anchor="center", stretch=False)
+    tree.column("check", width=190, anchor="center", stretch=False)
     tree.column("risk", width=90, anchor="center", stretch=False)
     tree.column("comment", width=820, anchor="w", stretch=True)
 

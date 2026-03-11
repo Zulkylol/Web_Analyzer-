@@ -15,4 +15,6 @@ def init_cookies_result(url: str) -> dict:
             "comment": "",
         },
         "error": "",
+        "errors": {"message": ""},
+        "report": {},
     }

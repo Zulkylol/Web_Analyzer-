@@ -49,5 +49,7 @@ def init_http_result(input_url: str, normalized_url: str) -> dict:
         },
         "redirects": {},
         "comment": "",
+        "errors": {"message": ""},
+        "report": {},
     }
     return result

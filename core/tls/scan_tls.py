@@ -4,6 +4,7 @@ from core.tls.cert_extensions import analyze_extensions
 from core.tls.cert_identity import analyze_identity
 from core.tls.cert_metadata import analyze_metadata
 from core.tls.cert_public_key import analyze_public_key
+from core.tls.report import build_tls_report
 from core.tls.cert_validity import analyze_validity
 from core.tls.result import init_tls_result
 from core.tls.risk import compute_tls_risks
@@ -17,26 +18,29 @@ def scan_tls_config(url: str) -> dict:
     normalized_url, hostname, port, hostname_for_match = prepare_tls_target(url)
     result = init_tls_result()
     result["target"].update({"hostname": hostname, "port": port, "url": normalized_url})
+    try:
+        artifacts = fetch_tls_artifacts(hostname, port)
+        if artifacts.error:
+            result["errors"]["message"] = artifacts.error
+        else:
+            result["tls"]["negotiated_version"] = artifacts.negotiated_version
+            if artifacts.cipher_tuple:
+                name, proto, bits = artifacts.cipher_tuple
+                result["tls"]["cipher"].update({"name": name, "protocol": proto, "bits": bits})
 
-    artifacts = fetch_tls_artifacts(hostname, port)
-    if artifacts.error:
-        result["errors"]["message"] = artifacts.error
-        return result
+            x509_cert = load_x509_certificate(artifacts.der_cert)
 
-    result["tls"]["negotiated_version"] = artifacts.negotiated_version
-    if artifacts.cipher_tuple:
-        name, proto, bits = artifacts.cipher_tuple
-        result["tls"]["cipher"].update({"name": name, "protocol": proto, "bits": bits})
+            analyze_identity(result, x509_cert, hostname_for_match)
+            analyze_validity(result, x509_cert)
+            analyze_metadata(result, x509_cert)
+            analyze_public_key(result, x509_cert)
+            analyze_extensions(result, x509_cert)
+            analyze_trust(result, x509_cert, normalized_url)
+            analyze_tls_versions_and_policy(result, normalized_url)
+            analyze_cipher_and_weak_ciphers(result, hostname, port)
+            result["risks"] = compute_tls_risks(result)
+    except Exception as exc:
+        result["errors"]["message"] = f"Erreur TLS : {exc}"
 
-    x509_cert = load_x509_certificate(artifacts.der_cert)
-
-    analyze_identity(result, x509_cert, hostname_for_match)
-    analyze_validity(result, x509_cert)
-    analyze_metadata(result, x509_cert)
-    analyze_public_key(result, x509_cert)
-    analyze_extensions(result, x509_cert)
-    analyze_trust(result, x509_cert, normalized_url)
-    analyze_tls_versions_and_policy(result, normalized_url)
-    analyze_cipher_and_weak_ciphers(result, hostname, port)
-    result["risks"] = compute_tls_risks(result)
+    result["report"] = build_tls_report(result)
     return result

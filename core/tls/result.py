@@ -76,6 +76,7 @@ def init_tls_result() -> dict:
         },
         "risks": {},
         "errors": {"message": ""},
+        "report": {},
     }
 
     return result

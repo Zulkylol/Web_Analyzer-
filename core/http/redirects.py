@@ -7,6 +7,7 @@ import ipaddress
 from urllib.parse import urlparse, urljoin
 
 from core.http.urls import analyze_url_transition  # <-- NEW
+from utils.http import shorten_url
 import traceback
 
 
@@ -43,10 +44,10 @@ def _format_redirect_chain_comment(hop: dict) -> str:
     if from_url and location:
         resolved_from_location = urljoin(from_url, location)
         if resolved_from_location == hop_url:
-            return f"{from_url} -> Redirection: {location}"
-        return f"{from_url} -> Redirection: {location} -> {hop_url}"
+            return f"{shorten_url(from_url)} -> Redirection: {shorten_url(hop_url)}"
+        return f"{shorten_url(from_url)} -> Redirection: {shorten_url(hop_url)}"
 
-    return f"Reponse finale: {hop_url}"
+    return f"Reponse finale: {shorten_url(hop_url)}"
 
 # ===============================================================
 # FUNCTION : scan_redirections()
@@ -70,7 +71,6 @@ def scan_redirections(response, original_url: str) -> dict:
         "redirect_chain": [],
         "hop_findings": [],
         "hop_worst_weight": 0,
-        "rd_comment": "",
         "redirect_ips": [],
         "ri_comment": "",
         "risk": "Info",
@@ -121,10 +121,10 @@ def scan_redirections(response, original_url: str) -> dict:
             elif dom_base == initial_base_domain:
                 if normalized_dom == normalized_initial:
                     risk = "INFO"
-                    comment = "Meme domaine."
+                    comment = ""
                 elif apex_www_pair:
                     risk = "INFO"
-                    comment = "Redirection standard entre domaine nu et www."
+                    comment = ""
                 else:
                     risk = "LOW"
                     comment = "Sous-domaine du meme domaine."
@@ -269,7 +269,6 @@ def scan_redirections(response, original_url: str) -> dict:
         if initial_domain:
             for dom in result["redirect_domains"]:
                 if _base_domain(dom) != initial_base_domain and dom not in result["redirect_ips"]:
-                    result["rd_comment"] = f"Redirection vers un autre domaine ({dom})."
                     if result["risk"] == "Low":
                         result["risk"] = "Medium"
                     break
