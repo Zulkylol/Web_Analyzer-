@@ -1,12 +1,7 @@
-try:
-    import httpx
-except ImportError:
-    httpx = None
-
+import httpx
 import requests
 
 from constants import SECURITY_HEADERS
-from core.http.client import fetch_http_response
 from core.http.errors import map_http_scan_error
 from core.http.exposure import scan_exposed_methods, scan_standard_files
 from core.http.headers_security import scan_security_headers
@@ -16,12 +11,10 @@ from core.http.redirects import scan_redirections
 from core.http.response_analysis import (
     adjust_url_risk_with_https_posture,
     detect_http_version,
-    evaluate_http_version_risk,
     evaluate_https_posture,
     evaluate_response_time,
     evaluate_response_time_risk,
     evaluate_status,
-    evaluate_status_risk,
 )
 from core.http.result import init_http_result
 from core.http.urls import analyze_url_transition
@@ -35,7 +28,12 @@ def scan_http_config(url: str) -> dict:
     request_headers = {"User-Agent": "Mozilla/5.0"}
 
     try:
-        response = fetch_http_response(normalized_url, headers=request_headers, timeout=5)
+        response = requests.get(
+            normalized_url,
+            headers=request_headers,
+            timeout=5,
+            allow_redirects=True,
+        )
 
         # Bloc 1: informations de reponse immediates.
         (
@@ -43,7 +41,8 @@ def scan_http_config(url: str) -> dict:
             result["status_message"],
             result["status_ok"],
         ) = evaluate_status(response)
-        result["status_risk"] = evaluate_status_risk(result["status_code"])
+
+        result["status_risk"] = "INFO"
 
         (
             result["final_url"],
@@ -57,8 +56,10 @@ def scan_http_config(url: str) -> dict:
             result["http_version"],
             result["http_ok"],
             result["http_comment"],
-        ) = detect_http_version(result["final_url"], response, httpx)
-        result["http_version_risk"] = evaluate_http_version_risk(result["http_version"])
+            result["http_version_risk"],
+        ) = detect_http_version(result["final_url"], httpx)
+
+        # result["http_version_risk"] = evaluate_http_version_risk(result["http_version"])
 
         # Bloc 2: posture HTTPS et impact sur l'interpretation de l'URL finale.
         (

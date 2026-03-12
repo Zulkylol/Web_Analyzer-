@@ -4,7 +4,6 @@
 # IMPORTS
 # ===============================================================
 from http_status_codes import HTTP_STATUS_CODES
-from utils.http import map_http_version
 from urllib.parse import urlparse, urlunparse
 
 
@@ -32,76 +31,41 @@ def evaluate_status(response) -> tuple[int, str, bool | None]:
 
     return status_code, status_message, status_ok
 
-
-def evaluate_status_risk(status_code: int) -> str:
-    """
-    Risk policy for HTTP status display.
-    Current policy: status code is informational by default.
-    """
-    # Le code HTTP reste visible dans le report, mais n'alimente pas une alerte par defaut.
-    return "INFO"
-
-
 # ===============================================================
-# FUNCTION : detect_http_version(url, response, httpx))
+# FUNCTION : detect_http_version(url)
 # ===============================================================
-def detect_http_version(url: str, response, httpx_module) -> tuple[str, bool | None, str]:
+def detect_http_version(url: str, httpx_module) -> tuple[str, bool | None, str, str]:
     """
-    Detect the HTTP protocol version (httpx first, then fallback).
+    Detect the negotiated HTTP protocol version with httpx.
 
     Returns:
         tuple[str, bool | None, str]:
             (http_version, http_ok, http_comment)
     """
+    try:
+        with httpx_module.Client(http2=True, timeout=5) as client:
+            response = client.get(url)
+            http_version = str(getattr(response, "http_version", "") or "").upper()
+    except Exception as exc:
+        return "Inconnue", None, f"Impossible de determiner la version HTTP via httpx: {exc}"
 
-    http_version = ""
-    http_comment = ""
-    http_ok = None
-
-    # httpx sait exposer proprement HTTP/2, contrairement au fallback requests/raw.
-    if httpx_module:
-        try:
-            with httpx_module.Client(http2=True, timeout=5) as c:
-                r2 = c.get(url)
-                hv = getattr(r2, "http_version", "") or ""
-                http_version = hv.upper()
-        except Exception:
-            pass
-    
-    # Fallback: requests expose seulement le numero brut lu sur la socket.
-    if not http_version:
-        v = getattr(getattr(response, "raw", None), "version", None)
-        version_label, version_comment = map_http_version(v)
-        http_version = version_label
-        http_comment = version_comment
-
-        if v in (11, 20):      # HTTP/1.1 or HTTP/2
-            http_ok = True
-        elif v in (9, 10):     # obsoletes
-            http_ok = False
-        else:
-            http_ok = None
+    if http_version in ("HTTP/3", "HTTP/2", "HTTP/1.1"):
+        http_ok = True
+        http_comment = "Version HTTP moderne et acceptable"
+        http_risk = "INFO"
+    elif http_version in ("HTTP/1.0", "HTTP/0.9"):
+        http_ok = False
+        http_comment = "Version HTTP obsolète"
+        http_risk = "HIGH"
     else:
-        if http_version in ("HTTP/2", "HTTP/1.1"):
-            http_ok = True
-        elif http_version in ("HTTP/1.0", "HTTP/0.9"):
-            http_ok = False
-        else:
-            http_ok = None
+        http_version = "Inconnue"
+        http_ok = None
+        http_comment = "httpx n'a pas expose de version HTTP exploitable"
+        http_risk = "MEDIUM"
 
-    return http_version, http_ok, http_comment
+    return http_version, http_ok, http_comment, http_risk
 
 
-def evaluate_http_version_risk(http_version: str) -> str:
-    """
-    Classify HTTP version risk.
-    """
-    v = (http_version or "").strip().upper()
-    if v in {"HTTP/2", "HTTP/3", "H2", "H3", "HTTP/1.1"}:
-        return "INFO"
-    if v in {"HTTP/1.0", "HTTP/0.9"}:
-        return "HIGH"
-    return "MEDIUM"
 def evaluate_https_posture(
     original_url: str,
     final_url: str,

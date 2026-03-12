@@ -89,7 +89,7 @@ class WebAnalyzerApp:
         self.go_button.config(state="disabled")
         self.open_report_button.config(state="disabled")
         self._progress_plan = self.build_progress_plan()
-        self.set_progress(0, style="warning-striped")
+        self.set_progress(0, style="warning-striped", allow_decrease=True)
 
         # Le scan tourne en arriere-plan pour garder l'interface fluide.
         threading.Thread(target=self.scan_in_background, args=(url,), daemon=True).start()
@@ -171,10 +171,14 @@ class WebAnalyzerApp:
             "finish": 100.0,
         }
 
-    def set_progress(self, value: float, style: str | None = None) -> None:
-        """Met a jour la barre directement, sans animation complexe."""
+    def set_progress(self, value: float, style: str | None = None, allow_decrease: bool = False) -> None:
+        """Met a jour la barre, avec option explicite pour la reinitialiser."""
         current = float(self.progress_bar["value"])
-        self.progress_bar["value"] = max(float(value), current)
+        next_value = float(value)
+        if allow_decrease:
+            self.progress_bar["value"] = next_value
+        else:
+            self.progress_bar["value"] = max(next_value, current)
         if style:
             self.progress_bar.configure(bootstyle=style)
         self.root.update_idletasks()
