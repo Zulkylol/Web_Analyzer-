@@ -18,6 +18,7 @@ def _lower_sev(sev: str) -> str:
     Returns : 
         str : lower security level
     """
+    # Certaines recommandations derivent le niveau attendu en "un cran plus bas".
     inv = {v: k for k, v in SEV_ORDER.items()}
     v = SEV_ORDER.get(sev, 0)
     return inv.get(max(0, v - 1), "info")
@@ -47,6 +48,7 @@ def _parse_directives(header_value: str) -> dict[str, str]:
     Returns:
         dict[str, str]: Mapping of directives to their values.
     """
+    # Utilise pour CSP et Permissions-Policy, ou la semantique repose sur des directives.
     directives: dict[str, str] = {}
     for part in header_value.split(";"):
         part = part.strip()
@@ -65,15 +67,14 @@ def _parse_directives(header_value: str) -> dict[str, str]:
 def scan_security_headers(
     headers: Mapping[str, Any],
     required_headers: dict[str, str],  # header -> expected severity if missing
-    ) -> tuple[list[str], list[dict[str, str | None]]]:
+    ) -> list[dict[str, str | None]]:
     """ 
     Analyze HTTP security headers and report missing, weak, or invalid configurations.
 
     Returns:
-        tuple[list[str], list[dict]]: 
-            - Missing header names
-            - Detailed findings (header, status, severity, issue, recommendation, value)
+        list[dict]: Detailed findings (header, status, severity, issue, recommendation, value)
     """
+    # Chaque finding est deja pense pour pouvoir etre remonte tel quel dans le report HTTP.
     findings: list[dict[str, Any]] = []
 
     def expected(header: str) -> str:
@@ -341,5 +342,4 @@ def scan_security_headers(
                 else:
                     add("Permissions-Policy", "ok", "info", "Permissions-Policy présente, sans features sensibles autorisées", "", pp)
 
-    missing_headers = [f["header"] for f in findings if f["status"] == "missing"]
-    return missing_headers, findings
+    return findings

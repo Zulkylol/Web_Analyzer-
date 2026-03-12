@@ -38,6 +38,7 @@ def evaluate_status_risk(status_code: int) -> str:
     Risk policy for HTTP status display.
     Current policy: status code is informational by default.
     """
+    # Le code HTTP reste visible dans le report, mais n'alimente pas une alerte par defaut.
     return "INFO"
 
 
@@ -57,7 +58,7 @@ def detect_http_version(url: str, response, httpx_module) -> tuple[str, bool | N
     http_comment = ""
     http_ok = None
 
-    # ------------------ TRY VIA HTTPX ---------------------
+    # httpx sait exposer proprement HTTP/2, contrairement au fallback requests/raw.
     if httpx_module:
         try:
             with httpx_module.Client(http2=True, timeout=5) as c:
@@ -67,7 +68,7 @@ def detect_http_version(url: str, response, httpx_module) -> tuple[str, bool | N
         except Exception:
             pass
     
-    # -------------- FALLBACK VIA REQUEST/RAW --------------
+    # Fallback: requests expose seulement le numero brut lu sur la socket.
     if not http_version:
         v = getattr(getattr(response, "raw", None), "version", None)
         version_label, version_comment = map_http_version(v)

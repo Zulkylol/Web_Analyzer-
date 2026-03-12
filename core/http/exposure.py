@@ -89,7 +89,6 @@ def scan_exposed_methods(
         "value": "Unknown",
         "risk": "INFO",
         "comment": "",
-        "allow": [],
     }
 
     if not final_url:
@@ -116,8 +115,6 @@ def scan_exposed_methods(
                 if m and m.strip()
             }
         )
-        result["allow"] = methods
-
         if not methods:
             result["value"] = "Not disclosed"
             result["risk"] = "INFO"

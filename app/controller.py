@@ -9,13 +9,12 @@ from core.http.scan_http import scan_http_config
 from core.tls.scan_tls import scan_tls_config
 from ui.app_window import build_main_window
 from ui.display_common import display_report_rows
-from ui.display_cookies import display_cookies
-from ui.display_http import display_http
-from ui.display_tls import display_ssl_tls
 from ui.tables import clear_tables
 
 
 class WebAnalyzerApp:
+    """Controleur principal: relie l'interface, les scans et la synthese globale."""
+
     def __init__(self) -> None:
         self.selected_language = "fr"
         self.settings_window = None
@@ -25,16 +24,7 @@ class WebAnalyzerApp:
             "Cookies": None,
         }
 
-        self._progress_lock = threading.Lock()
         self._progress_plan = {}
-        self._progress_target_value = 0.0
-        self._progress_running = False
-        self._progress_phase_active = False
-        self._progress_phase_start_value = 0.0
-        self._progress_phase_end_value = 0.0
-        self._progress_phase_started_at = 0.0
-        self._progress_phase_expected_seconds = 1.0
-        self._progress_animation_job = None
 
         ui_refs = build_main_window(
             self.launch_scan,
@@ -63,17 +53,20 @@ class WebAnalyzerApp:
         self.cookies_table = ui_refs["cookies_table"]
         self.details_text = ui_refs["details_text"]
 
+        # L'etat initial des options depend des cases a cocher.
         self.sync_http_options()
-        self.refresh_summary_cards()
+        self.refresh_summary_view()
 
     def run(self) -> None:
+        """Launch of TK mainloop"""
         self.root.mainloop()
 
     def clear_tree(self, tree) -> None:
-        for item in tree.get_children():
-            tree.delete(item)
+        """Delete all the lines of a table"""
+        tree.delete(*tree.get_children())
 
     def launch_scan(self) -> None:
+        """Prepare l'UI, normalise l'URL d'entree et demarre le scan hors thread UI."""
         clear_tables(self.http_table, self.ssl_table, self.cookies_table)
         self.clear_tree(self.summary_table)
         self.scan_results = {
@@ -95,80 +88,80 @@ class WebAnalyzerApp:
 
         self.go_button.config(state="disabled")
         self.open_report_button.config(state="disabled")
-        self.start_progress_tracking()
+        self._progress_plan = self.build_progress_plan()
+        self.set_progress(0, style="warning-striped")
 
+        # Le scan tourne en arriere-plan pour garder l'interface fluide.
         threading.Thread(target=self.scan_in_background, args=(url,), daemon=True).start()
 
     def scan_in_background(self, url: str) -> None:
+        """Execute les scans actifs puis met a jour les tables et la synthese."""
         try:
-            self.set_progress_target(6)
+            self.set_progress(6)
 
             result_http = None
             if self.scan_http_var.get():
-                self.start_progress_phase("HTTP")
+                phase = self._progress_plan.get("phases", {}).get("HTTP", {})
+                self.set_progress(float(phase.get("start", 6.0)))
                 result_http = scan_http_config(url)
-                self.complete_progress_phase("HTTP")
+                self.set_progress(float(phase.get("end", 6.0)))
             self.scan_results["HTTP"] = result_http
 
             result_tls = None
             if self.scan_tls_var.get():
-                self.start_progress_phase("SSL/TLS")
+                phase = self._progress_plan.get("phases", {}).get("SSL/TLS", {})
+                self.set_progress(float(phase.get("start", 6.0)))
                 result_tls = scan_tls_config(url)
-                self.complete_progress_phase("SSL/TLS")
+                self.set_progress(float(phase.get("end", 6.0)))
             self.scan_results["SSL/TLS"] = result_tls
 
             result_cookies = None
             if self.scan_cookies_var.get():
-                self.start_progress_phase("Cookies")
+                phase = self._progress_plan.get("phases", {}).get("Cookies", {})
+                self.set_progress(float(phase.get("start", 6.0)))
                 result_cookies = scan_cookies_config(url)
-                self.complete_progress_phase("Cookies")
+                self.set_progress(float(phase.get("end", 6.0)))
             self.scan_results["Cookies"] = result_cookies
 
-            self.set_progress_target(self._progress_plan.get("after_scans", 82.0))
+            self.set_progress(self._progress_plan.get("after_scans", 82.0))
             if self.scan_http_var.get() and result_http is not None:
-                display_http(result_http, self.http_table)
+                display_report_rows(result_http.get("report", {}), self.http_table)
             if self.scan_tls_var.get() and result_tls is not None:
-                display_ssl_tls(result_tls, self.ssl_table)
+                display_report_rows(result_tls.get("report", {}), self.ssl_table)
             if self.scan_cookies_var.get() and result_cookies is not None:
-                display_cookies(result_cookies, self.cookies_table)
+                display_report_rows(result_cookies.get("report", {}), self.cookies_table)
 
-            self.refresh_summary_cards()
-            self.set_progress_target(self._progress_plan.get("summary", 92.0))
+            self.refresh_summary_view()
+            self.set_progress(self._progress_plan.get("summary", 92.0))
 
         except Exception as exc:
             messagebox.showerror("Erreur", f"Erreur pendant le scan : {exc}")
 
         finally:
-            self.finish_progress_tracking()
+            self.set_progress(self._progress_plan.get("finish", 100.0), style="success-striped")
             time.sleep(0.35)
             self.open_report_button.config(state="normal")
             self.go_button.config(state="normal")
 
-    def update_progress(self, value, steps=12, delay=0.008) -> None:
-        self.set_progress_target(value)
-
     def build_progress_plan(self) -> dict:
+        """Repartit la barre selon le cout estime de HTTP, TLS et Cookies."""
         enabled_phases = []
         if self.scan_http_var.get():
-            enabled_phases.append(("HTTP", 5.0, 6.0))
+            enabled_phases.append(("HTTP", 5.0))
         if self.scan_tls_var.get():
-            enabled_phases.append(("SSL/TLS", 3.0, 3.5))
+            enabled_phases.append(("SSL/TLS", 3.0))
         if self.scan_cookies_var.get():
-            enabled_phases.append(("Cookies", 2.0, 2.5))
+            enabled_phases.append(("Cookies", 2.0))
 
         start_value = 6.0
-        scan_budget = 74.0
-        total_weight = sum(weight for _, weight, _ in enabled_phases) or 1.0
+        scan_budget = 75.0
+        total_weight = sum(weight for _, weight in enabled_phases) or 1.0
         cursor = start_value
         phases = {}
 
-        for phase_name, weight, expected_seconds in enabled_phases:
+        for phase_name, weight in enabled_phases:
             span = scan_budget * (weight / total_weight)
-            phases[phase_name] = {
-                "start": cursor,
-                "end": cursor + span,
-                "expected_seconds": expected_seconds,
-            }
+            phases[phase_name] = {"start": cursor, "end": cursor + span}
             cursor += span
 
         return {
@@ -178,107 +171,16 @@ class WebAnalyzerApp:
             "finish": 100.0,
         }
 
-    def reset_progress_tracking(self) -> None:
-        if self._progress_animation_job is not None:
-            try:
-                self.root.after_cancel(self._progress_animation_job)
-            except Exception:
-                pass
-            self._progress_animation_job = None
-
-        with self._progress_lock:
-            self._progress_plan = {}
-            self._progress_target_value = 0.0
-            self._progress_running = False
-            self._progress_phase_active = False
-            self._progress_phase_start_value = 0.0
-            self._progress_phase_end_value = 0.0
-            self._progress_phase_started_at = 0.0
-            self._progress_phase_expected_seconds = 1.0
-
-        self.progress_bar["value"] = 0
-        self.progress_bar.configure(bootstyle="warning-striped")
+    def set_progress(self, value: float, style: str | None = None) -> None:
+        """Met a jour la barre directement, sans animation complexe."""
+        current = float(self.progress_bar["value"])
+        self.progress_bar["value"] = max(float(value), current)
+        if style:
+            self.progress_bar.configure(bootstyle=style)
         self.root.update_idletasks()
 
-    def start_progress_tracking(self) -> None:
-        self.reset_progress_tracking()
-        with self._progress_lock:
-            self._progress_plan = self.build_progress_plan()
-            self._progress_running = True
-            self._progress_target_value = 0.0
-        self.schedule_progress_animation()
-
-    def finish_progress_tracking(self) -> None:
-        with self._progress_lock:
-            self._progress_target_value = float(self._progress_plan.get("finish", 100.0))
-            self._progress_running = False
-            self._progress_phase_active = False
-
-    def set_progress_target(self, value: float) -> None:
-        with self._progress_lock:
-            self._progress_target_value = max(float(value), self._progress_target_value)
-
-    def start_progress_phase(self, phase_name: str) -> None:
-        phase = self._progress_plan.get("phases", {}).get(phase_name)
-        if not phase:
-            return
-
-        with self._progress_lock:
-            self._progress_target_value = max(float(phase["start"]), self._progress_target_value)
-            self._progress_phase_active = True
-            self._progress_phase_start_value = float(phase["start"])
-            self._progress_phase_end_value = float(phase["end"])
-            self._progress_phase_started_at = time.monotonic()
-            self._progress_phase_expected_seconds = float(phase["expected_seconds"])
-
-    def complete_progress_phase(self, phase_name: str) -> None:
-        phase = self._progress_plan.get("phases", {}).get(phase_name)
-        if not phase:
-            return
-
-        with self._progress_lock:
-            self._progress_target_value = max(float(phase["end"]), self._progress_target_value)
-            self._progress_phase_active = False
-
-    def schedule_progress_animation(self) -> None:
-        if self._progress_animation_job is None:
-            self._tick_progress_animation()
-
-    def _tick_progress_animation(self) -> None:
-        with self._progress_lock:
-            target = self._progress_target_value
-            running = self._progress_running
-            phase_active = self._progress_phase_active
-            phase_start = self._progress_phase_start_value
-            phase_end = self._progress_phase_end_value
-            phase_started_at = self._progress_phase_started_at
-            expected_seconds = self._progress_phase_expected_seconds
-
-        if phase_active:
-            span = max(0.0, phase_end - phase_start)
-            elapsed = max(0.0, time.monotonic() - phase_started_at)
-            ratio = min(elapsed / max(expected_seconds, 0.5), 0.92)
-            target = max(target, phase_start + span * ratio)
-
-        current = float(self.progress_bar["value"])
-        if target > current:
-            speed = 0.28 if not running else 0.16
-            max_step = 5.0 if not running else 2.8
-            step = max(0.25, min(max_step, (target - current) * speed))
-            current = min(target, current + step)
-            self.progress_bar["value"] = current
-            self.root.update_idletasks()
-
-        if not running and current >= target - 0.1:
-            self.progress_bar["value"] = target
-            self.progress_bar.configure(bootstyle="success-striped")
-            self.root.update_idletasks()
-            self._progress_animation_job = None
-            return
-
-        self._progress_animation_job = self.root.after(33, self._tick_progress_animation)
-
     def open_settings(self) -> None:
+        """Ouvre une petite fenetre de parametres centree sur la fenetre principale."""
         if self.settings_window is not None and self.settings_window.winfo_exists():
             self.settings_window.deiconify()
             self.settings_window.lift()
@@ -292,18 +194,6 @@ class WebAnalyzerApp:
         settings_win.resizable(False, False)
         settings_win.transient(self.root)
         settings_win.grab_set()
-        self.root.update_idletasks()
-        settings_win.update_idletasks()
-        root_x = self.root.winfo_rootx()
-        root_y = self.root.winfo_rooty()
-        root_w = self.root.winfo_width()
-        root_h = self.root.winfo_height()
-        win_w = settings_win.winfo_width() or 360
-        win_h = settings_win.winfo_height() or 180
-        pos_x = root_x + max(0, (root_w - win_w) // 2)
-        pos_y = root_y + max(0, (root_h - win_h) // 2)
-        settings_win.geometry(f"{win_w}x{win_h}+{pos_x}+{pos_y}")
-
         def close_settings():
             self.settings_window = None
             settings_win.destroy()
@@ -347,9 +237,11 @@ class WebAnalyzerApp:
         ttk.Button(actions, text="Annuler", bootstyle="secondary", command=close_settings).pack(side="left", padx=8)
 
     def open_report(self) -> None:
+        """Placeholder pour une future fonctionnalite d'export/ouverture de rapport."""
         messagebox.showinfo("Report")
 
     def sync_http_options(self) -> None:
+        """Active 'Forcer HTTPS' uniquement quand le module HTTP est coche."""
         if self.scan_http_var.get():
             self.force_https_check.config(state="normal")
         else:
@@ -357,9 +249,11 @@ class WebAnalyzerApp:
             self.force_https_check.config(state="disabled")
 
     def is_summary_risk(self, risk: str) -> bool:
+        """Filtre les niveaux qui doivent remonter dans l'onglet global."""
         return str(risk or "").strip().upper() in {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
 
     def refresh_summary_table(self) -> None:
+        """Consolide les findings des trois modules dans la table globale."""
         self.clear_tree(self.summary_table)
         summary_rows = []
         for source_name, result in self.scan_results.items():
@@ -378,7 +272,8 @@ class WebAnalyzerApp:
 
         display_report_rows({"rows": summary_rows}, self.summary_table)
 
-    def refresh_summary_cards(self) -> None:
+    def refresh_summary_view(self) -> None:
+        """Met a jour les compteurs de synthese a partir des reports deja calcules."""
         self.refresh_summary_table()
 
         total_rows = 0
@@ -398,8 +293,6 @@ class WebAnalyzerApp:
             risk = "ELEVE"
         elif medium_alerts >= 2:
             risk = "MODERE"
-        elif total_alerts > 0:
-            risk = "FAIBLE"
         else:
             risk = "FAIBLE"
 
@@ -409,6 +302,7 @@ class WebAnalyzerApp:
         self.summary_risk_var.set(risk)
 
     def on_table_select(self, event) -> None:
+        """Affiche le detail complet de la ligne selectionnee sous les onglets."""
         tree = event.widget
         selected = tree.selection()
         if not selected:
@@ -418,6 +312,7 @@ class WebAnalyzerApp:
         value = values[1] if len(values) > 1 else ""
         check = values[2] if len(values) > 2 else ""
         risk = values[3] if len(values) > 3 else ""
+        # Le commentaire brut est memorise au rendu pour eviter les troncatures visuelles.
         comment = getattr(tree, "_row_comments", {}).get(selected[0], values[4] if len(values) > 4 else "")
         comment = str(comment or "").strip()
 

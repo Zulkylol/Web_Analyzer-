@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from constants import STATUS_ICON
-from core.reporting import build_report, icon_for_risk, make_row
+from core.reporting import build_report, icon_for_risk, make_row, make_section_row
 
 
 def build_http_report(result: dict) -> dict:
+    """Transforme le resultat HTTP brut en lignes ordonnees pour l'UI."""
     rows: list[dict] = []
     redirects = result.get("redirects") or {}
     mixed_urls = result.get("mixed_url") or []
@@ -24,6 +25,9 @@ def build_http_report(result: dict) -> dict:
             )
         )
 
+    def add_section(title: str):
+        rows.append(make_section_row(title))
+
     if error_message:
         add_row(
             "Erreur HTTP",
@@ -34,6 +38,31 @@ def build_http_report(result: dict) -> dict:
             include=True,
         )
         return build_report("HTTP", rows, error_message=error_message)
+
+    # Section 1: cible initiale, transport final et metriques de base.
+    add_section("Cible et transport")
+    add_row("URL saisie", result.get("original_url", ""), comment="URL normalisee utilisee pour le scan")
+
+    https_risk = result.get("https_risk", "MEDIUM")
+    uses_https = bool(result.get("uses_https"))
+    add_row(
+        "HTTPS active",
+        result.get("https_value", "Oui" if uses_https else "Non"),
+        risk=https_risk,
+        comment=result.get("https_comment", ""),
+        ok_when_info=uses_https,
+        include=str(https_risk).upper() != "INFO",
+    )
+
+    url_risk = result.get("url_risk", "INFO")
+    add_row(
+        "URL finale",
+        result.get("final_url", ""),
+        risk=url_risk,
+        comment=result.get("url_comment", ""),
+        ok_when_info=bool(result.get("url_ok")),
+        include=str(url_risk).upper() != "INFO",
+    )
 
     status_risk = result.get("status_risk", "INFO")
     add_row(
@@ -66,28 +95,6 @@ def build_http_report(result: dict) -> dict:
             include=True,
         )
 
-    https_risk = result.get("https_risk", "MEDIUM")
-    uses_https = bool(result.get("uses_https"))
-    add_row(
-        "HTTPS active",
-        result.get("https_value", "Oui" if uses_https else "Non"),
-        risk=https_risk,
-        comment=result.get("https_comment", ""),
-        ok_when_info=uses_https,
-        include=str(https_risk).upper() != "INFO",
-    )
-
-    add_row("URL saisie", result.get("original_url", ""), comment="URL normalisée utilisée pour le scan")
-    url_risk = result.get("url_risk", "INFO")
-    add_row(
-        "URL finale",
-        result.get("final_url", ""),
-        risk=url_risk,
-        comment=result.get("url_comment", ""),
-        ok_when_info=bool(result.get("url_ok")),
-        include=str(url_risk).upper() != "INFO",
-    )
-
     time_risk = result.get("time_risk", "INFO")
     add_row(
         "Temps de reponse",
@@ -98,51 +105,8 @@ def build_http_report(result: dict) -> dict:
         include=str(time_risk).upper() != "INFO",
     )
 
-    if uses_https:
-        mixed = bool(result.get("mixed_content"))
-        mixed_risk = str(result.get("mixed_content_risk", "INFO")).upper()
-        add_row(
-            "Contenu mixte",
-            "Oui" if mixed else "Non",
-            risk=mixed_risk,
-            comment=result.get("mixed_comment", ""),
-            ok_when_info=not mixed,
-            include=mixed_risk != "INFO",
-        )
-
-        for index, item in enumerate(mixed_urls, start=1):
-            try:
-                mixed_url, origin = item
-            except Exception:
-                mixed_url, origin = str(item), ""
-            add_row(
-                "URL mixte" if index == 1 else "",
-                mixed_url,
-                risk=mixed_risk or "MEDIUM",
-                comment=origin,
-                check=icon_for_risk(mixed_risk or "MEDIUM"),
-            )
-
-    header_findings = result.get("header_findings") or []
-    if header_findings:
-        header_idx = 0
-        for finding in header_findings:
-            if not uses_https and finding.get("header") == "Strict-Transport-Security":
-                continue
-            header_idx += 1
-            severity = str(finding.get("severity", "INFO")).upper()
-            header_ok = str(finding.get("status", "")).lower() == "ok"
-            add_row(
-                f"Header de securite #{header_idx}",
-                finding.get("header", ""),
-                risk=severity,
-                comment=str(finding.get("issue", "")),
-                ok_when_info=header_ok,
-                include=severity != "INFO",
-            )
-            if finding.get("recommendation"):
-                add_row("", "↳ Recommandation", comment=finding["recommendation"])
-
+    # Section 2: comportement de redirection entre l'URL saisie et la cible finale.
+    add_section("Redirections")
     num_risk = str(redirects.get("num_risk", "INFO")).upper()
     add_row(
         "Nombre de redirections",
@@ -192,6 +156,57 @@ def build_http_report(result: dict) -> dict:
                 comment = str(hop)
             add_row("Chaine de redirections" if index == 1 else "", str(hop_status), comment=comment)
 
+    # Section 3: securite du contenu recu et des headers de protection.
+    if uses_https or result.get("header_findings"):
+        add_section("Securite de contenu / headers")
+
+    if uses_https:
+        mixed = bool(result.get("mixed_content"))
+        mixed_risk = str(result.get("mixed_content_risk", "INFO")).upper()
+        add_row(
+            "Contenu mixte",
+            "Oui" if mixed else "Non",
+            risk=mixed_risk,
+            comment=result.get("mixed_comment", ""),
+            ok_when_info=not mixed,
+            include=mixed_risk != "INFO",
+        )
+
+        for index, item in enumerate(mixed_urls, start=1):
+            try:
+                mixed_url, origin = item
+            except Exception:
+                mixed_url, origin = str(item), ""
+            add_row(
+                "URL mixte" if index == 1 else "",
+                mixed_url,
+                risk=mixed_risk or "MEDIUM",
+                comment=origin,
+                check=icon_for_risk(mixed_risk or "MEDIUM"),
+            )
+
+    header_findings = result.get("header_findings") or []
+    if header_findings:
+        header_idx = 0
+        for finding in header_findings:
+            if not uses_https and finding.get("header") == "Strict-Transport-Security":
+                continue
+            header_idx += 1
+            severity = str(finding.get("severity", "INFO")).upper()
+            header_ok = str(finding.get("status", "")).lower() == "ok"
+            add_row(
+                f"Header de securite #{header_idx}",
+                finding.get("header", ""),
+                risk=severity,
+                comment=str(finding.get("issue", "")),
+                ok_when_info=header_ok,
+                include=severity != "INFO",
+            )
+            if finding.get("recommendation"):
+                add_row("", "-> Recommandation", comment=finding["recommendation"])
+
+    # Section 4: surface d'exposition annexe autour de la cible HTTP.
+    add_section("Exposition")
     standard_files = result.get("standard_files") or []
     if standard_files:
         for index, item in enumerate(standard_files, start=1):

@@ -29,6 +29,7 @@ def map_http_version(version_number: int) -> Tuple[str, str]:
 
 
 def shorten_url(url: str, path_limit: int = 28) -> str:
+    """Raccourcit une URL pour la vue table en supprimant les query params trop verbeux."""
     parsed = urlparse(str(url or ""))
     if not parsed.scheme or not parsed.netloc:
         return str(url or "")

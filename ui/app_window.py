@@ -7,6 +7,7 @@ from ui.tables import create_result_table
 
 
 def build_main_window(start_scan, open_settings, open_report, on_table_select, sync_http_options):
+    """Construit la fenetre principale et retourne les references utiles au controleur."""
     root = ttk.Window(themename="cosmo")
     root.title("Web Analyzer")
     root.geometry("1580x1100")
@@ -19,6 +20,7 @@ def build_main_window(start_scan, open_settings, open_report, on_table_select, s
     )
     title_label.pack(pady=10)
 
+    # Zone de saisie de l'URL a analyser.
     url_frame = ttk.Frame(root)
     url_frame.pack(pady=5)
     ttk.Label(url_frame, text="URL du site:", font=("Helvetica", 12)).pack(side="left", padx=5)
@@ -28,6 +30,7 @@ def build_main_window(start_scan, open_settings, open_report, on_table_select, s
     controls_row = ttk.Frame(root)
     controls_row.pack(padx=10, pady=10, fill="x")
 
+    # Bloc des options de scan.
     checkbox_frame = ttk.LabelFrame(
         controls_row,
         text="S\u00e9lection des v\u00e9rifications",
@@ -53,6 +56,7 @@ def build_main_window(start_scan, open_settings, open_report, on_table_select, s
     ttk.Checkbutton(checkbox_frame, text="Analyser TLS et les certificats", variable=scan_tls_var).pack(anchor="w", pady=2, padx=5)
     ttk.Checkbutton(checkbox_frame, text="Analyser les cookies", variable=scan_cookies_var).pack(anchor="w", pady=2, padx=5)
 
+    # Bloc des actions et de la progression.
     actions_frame = ttk.LabelFrame(controls_row, text="Actions", font=("Helvetica", 11, "bold"))
     actions_frame.pack(side="left", fill="both", expand=True, padx=(8, 0))
 
@@ -85,6 +89,7 @@ def build_main_window(start_scan, open_settings, open_report, on_table_select, s
     tables_frame = ttk.Frame(root)
     tables_frame.pack(padx=10, pady=10, fill="both", expand=True)
 
+    # Les resultats sont organises par onglet pour garder une lecture simple.
     results_notebook = ttk.Notebook(tables_frame)
     results_notebook.pack(fill="both", expand=True)
 
@@ -106,6 +111,7 @@ def build_main_window(start_scan, open_settings, open_report, on_table_select, s
     summary_box = ttk.LabelFrame(tab_summary, text="Synthese", font=("Helvetica", 11, "bold"))
     summary_box.pack(fill="x", padx=14, pady=14)
 
+    # Les cartes du resume se repartissent uniformement sur la largeur.
     for col in range(4):
         summary_box.columnconfigure(col, weight=1, uniform="summary")
 
@@ -128,9 +134,11 @@ def build_main_window(start_scan, open_settings, open_report, on_table_select, s
     ssl_table = create_result_table(tab_tls, "TLS")
     cookies_table = create_result_table(tab_cookies, "Cookies")
 
+    # Tags de style reutilises par tous les tableaux.
     for tree in (summary_table, http_table, ssl_table, cookies_table):
         tree.tag_configure("zebra_even", background="#ffffff")
         tree.tag_configure("zebra_odd", background="#f3f6fa")
+        tree.tag_configure("section_header", font=("Helvetica", 10, "bold"), background="#e7edf3")
 
     cookies_table.tag_configure("cookie_name", font=("Helvetica", 10, "bold"))
 
@@ -150,6 +158,7 @@ def build_main_window(start_scan, open_settings, open_report, on_table_select, s
     details_text.insert("end", "S\u00e9lectionne une ligne pour afficher son commentaire complet.")
     details_text.config(state="disabled")
 
+    # Styles globaux de l'application.
     style = ttk.Style()
     style.configure("TNotebook.Tab", font=("Helvetica", 11, "bold"))
     style.configure("Treeview", rowheight=22)

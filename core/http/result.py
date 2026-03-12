@@ -1,9 +1,9 @@
 # core/http/result.py
 
 # ===============================================================
-# FUNCTION : init_http_result(input_url, normalized_url)
+# FUNCTION : init_http_result(normalized_url)
 # ===============================================================
-def init_http_result(input_url: str, normalized_url: str) -> dict:
+def init_http_result(normalized_url: str) -> dict:
     """
     Initialize and return the default result dictionary used for HTTP security analysis.
 
@@ -12,6 +12,7 @@ def init_http_result(input_url: str, normalized_url: str) -> dict:
             for the HTTP analysis workflow, initialized with default values.
     """
 
+    # Ce dictionnaire sert de contrat interne entre le scan HTTP, le report et l'UI.
     result = {
         "status_code": 0,
         "status_ok" : False,
@@ -31,21 +32,17 @@ def init_http_result(input_url: str, normalized_url: str) -> dict:
         "mixed_url": [],
         "mixed_comment": "Aucun contenu mixte détecté",
         "original_url": normalized_url,
-        "input_url" : input_url,
         "final_url": None,
         "url_risk": "INFO",
         "time": 0.0,
         "time_comment": "",
         "time_ok" : False,
         "time_risk": "INFO",
-        "missing_headers": [],
-        "headers_comment": [],
         "standard_files": [],
         "methods_exposure": {
             "value": "Unknown",
             "risk": "INFO",
             "comment": "",
-            "allow": [],
         },
         "redirects": {},
         "comment": "",

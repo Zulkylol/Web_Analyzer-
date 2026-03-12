@@ -26,6 +26,7 @@ def _dns_name_matches(pattern: str, hostname: str) -> bool:
         return False
 
     if p.startswith("*."):
+        # On n'accepte que le wildcard standard du label le plus a gauche.
         suffix = p[2:]
         if not suffix or "." not in suffix:
             return False
@@ -79,7 +80,7 @@ def analyze_identity(result: dict, x509_cert: x509.Certificate, hostname_for_mat
     except Exception:
         cert_subject["san_dns"] = []
 
-    # Host match (CN + SAN)
+    # Le matching se fait sur CN + SAN pour supporter les certificats courants.
     san_list = [cn] + cert_subject["san_dns"]
     match = False
     for entry in san_list:
@@ -96,10 +97,7 @@ def analyze_identity(result: dict, x509_cert: x509.Certificate, hostname_for_mat
     san_count = len(cert_subject["san_dns"])
     if san_count > 200:
         hostname_check["warnings"]["multi_domain"] = "Certificat multi-domaines massif"
-        hostname_check["ok"] = None
     elif san_count > 50:
         hostname_check["warnings"]["multi_domain"] = "Certificat multi-domaines important"
-        hostname_check["ok"] = None
     else:
         hostname_check["warnings"]["multi_domain"] = "Certificat avec peu de domaine"
-        hostname_check["ok"] = True

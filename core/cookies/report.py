@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from constants import STATUS_ICON
-from core.reporting import build_report, make_row
+from core.reporting import build_report, make_row, make_section_row
 
 
 def build_cookies_report(result: dict) -> dict:
+    """Transforme le resultat cookies brut en lignes ordonnees pour l'UI."""
     rows: list[dict] = []
     summary = result.get("summary") or {}
     findings = result.get("findings") or []
@@ -27,10 +28,15 @@ def build_cookies_report(result: dict) -> dict:
             )
         )
 
+    def add_section(title: str):
+        rows.append(make_section_row(title))
+
     if error_message:
         add_row("Erreur cookies", "-", risk="HIGH", comment=error_message, check=STATUS_ICON["high"], include=True)
         return build_report("Cookies", rows, error_message=error_message)
 
+    # Section 1: vue d'ensemble des cookies observes sur la reponse finale.
+    add_section("Synthese")
     add_row("URL finale", result.get("final_url", ""), comment=summary.get("comment", ""))
     cookie_count_risk = str(summary.get("cookie_count_risk", "INFO")).upper()
     add_row(
@@ -50,6 +56,8 @@ def build_cookies_report(result: dict) -> dict:
         comment="Niveau de risque le plus eleve detecte.",
     )
 
+    # Section 2: findings consolides, tries par severite.
+    add_section("Alertes")
     if findings:
         for index, finding in enumerate(findings, start=1):
             severity = str(finding.get("severity", "INFO")).upper()
@@ -57,17 +65,18 @@ def build_cookies_report(result: dict) -> dict:
                 f"Alerte cookie #{index}",
                 finding.get("cookie", "-"),
                 risk=severity,
-                comment=f"{finding.get('id', '')} ({severity}) : {finding.get('issue', '')}",
+                comment=str(finding.get("issue", "")),
                 include=severity != "INFO",
             )
             if finding.get("recommendation"):
-                add_row("", "↳ Recommandation", comment=finding["recommendation"])
+                add_row("", "-> Recommandation", comment=finding["recommendation"])
     else:
         add_row("Findings cookies", "-", risk="INFO", comment="Aucun probleme de configuration cookie detecte.", check=STATUS_ICON["ok"])
 
     if cookies:
-        add_row("Detail cookie", "")
-        for cookie in cookies:
+        # Section 3: detail attribut par attribut pour chaque cookie recu.
+        add_section("Details des cookies")
+        for index, cookie in enumerate(cookies, start=1):
             assessments = cookie.get("assessments") or {}
             samesite = (cookie.get("samesite") or "").strip().lower()
             samesite_text = samesite.capitalize() if samesite else "non defini"
@@ -78,7 +87,7 @@ def build_cookies_report(result: dict) -> dict:
             source = cookie.get("from_url", "-")
 
             add_row(
-                "Cookie name",
+                f"Cookie #{index}",
                 cookie.get("name", ""),
                 risk=assessments.get("name", {}).get("risk", "INFO"),
                 tags=("cookie_name",),

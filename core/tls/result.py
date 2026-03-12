@@ -1,7 +1,7 @@
 # core/tls/result.py
 
 # ===============================================================
-# FUNCTION : init_tls_result(input_url, normalized_url)
+# FUNCTION : init_tls_result()
 # ===============================================================
 def init_tls_result() -> dict:
     """
@@ -12,8 +12,8 @@ def init_tls_result() -> dict:
             for the TLS analysis workflow, initialized with default values.
     """
 
+    # La structure TLS est plus hierarchique car plusieurs sous-analyses l'alimentent.
     result = {
-        "target": {"hostname": "", "port": 443, "url": ""},
         "certificate": {
             "subject": {"common_name": "", "san_dns": []},
             "issuer": {"common_name": ""},
@@ -25,7 +25,7 @@ def init_tls_result() -> dict:
                 "expires_ok": False,
                 "expires_soon_comment": "",
             },
-            "serial": {"hex": "", "ok": True, "comment": "", "bitlen": 0},
+            "serial": {"hex": "", "ok": True, "comment": ""},
             "signature": {
                 "hash_algorithm": "",
                 "fingerprint_sha256": "",
@@ -33,7 +33,6 @@ def init_tls_result() -> dict:
                 "comment": "",
             },
             "public_key": {
-                "pem": "",
                 "type": "",
                 "size": None,
                 "curve": "",
@@ -60,8 +59,7 @@ def init_tls_result() -> dict:
         "hostname_check": {
             "match": False,
             "comment": "",
-            "ok": False,
-            "warnings": {"wildcard": "", "multi_domain": ""},
+            "warnings": {"multi_domain": ""},
         },
         "tls": {
             "negotiated_version": "",
@@ -72,7 +70,7 @@ def init_tls_result() -> dict:
             "weak_cipher_ok": True,
             "weak_cipher_comment": "",
             "policy": {"ok": True, "comment": ""},
-            "cipher": {"name": "", "protocol": "", "bits": 0, "ok": True, "comment": ""},
+            "cipher": {"name": "", "bits": 0, "ok": True, "comment": ""},
         },
         "risks": {},
         "errors": {"message": ""},

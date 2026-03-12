@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from constants import STATUS_ICON
-from core.reporting import build_report, make_row
+from core.reporting import build_report, make_row, make_section_row
 
 
 def build_tls_report(result: dict) -> dict:
+    """Transforme le resultat TLS brut en lignes ordonnees pour l'UI."""
     rows: list[dict] = []
     risks = result.get("risks", {}) or {}
     error_message = str((result.get("errors") or {}).get("message", "") or "")
@@ -26,6 +27,9 @@ def build_tls_report(result: dict) -> dict:
             )
         )
 
+    def add_section(title: str):
+        rows.append(make_section_row(title))
+
     if error_message:
         add_row("Erreur TLS", "-", risk="HIGH", comment=error_message, check=STATUS_ICON["high"], include=True)
         return build_report("SSL/TLS", rows, error_message=error_message)
@@ -35,6 +39,8 @@ def build_tls_report(result: dict) -> dict:
     trust = result.get("trust", {})
     hostname_check = result.get("hostname_check", {})
 
+    # Section 1: identite du certificat presentee par le serveur.
+    add_section("Identite du certificat")
     add_row("Nom", cert.get("subject", {}).get("common_name", ""), risk=r("name"), include=r("name") != "INFO")
 
     san = cert.get("subject", {}).get("san_dns", []) or []
@@ -62,11 +68,31 @@ def build_tls_report(result: dict) -> dict:
     add_row(
         "Nombre de SAN",
         len(san),
-        risk=r("san_count"),
+        risk="INFO",
         comment=hostname_check.get("warnings", {}).get("multi_domain", ""),
-        ok_when_info=bool(hostname_check.get("ok")),
-        include=r("san_count") != "INFO",
     )
+
+    # Section 2: confiance de la chaine et statut autosigne.
+    add_section("Confiance")
+    add_row(
+        "Autorite certifiante",
+        cert.get("issuer", {}).get("common_name", ""),
+        risk=r("authority"),
+        comment="Autorite reconnue" if trust.get("is_trusted") else "Autorite non reconnue",
+        ok_when_info=bool(trust.get("is_trusted")),
+        include=r("authority") != "INFO",
+    )
+    add_row(
+        "Auto-signe",
+        trust.get("is_self_signed"),
+        risk=r("self_signed"),
+        comment="Certificat autosigne" if trust.get("is_self_signed") else "Certificat non autosigne",
+        ok_when_info=not trust.get("is_self_signed"),
+        include=r("self_signed") != "INFO",
+    )
+
+    # Section 3: metadonnees generales du certificat.
+    add_section("Metadonnees du certificat")
     add_row(
         "Debut de validite",
         cert.get("validity", {}).get("not_before", ""),
@@ -94,10 +120,8 @@ def build_tls_report(result: dict) -> dict:
     add_row(
         "Serial number",
         cert.get("serial", {}).get("hex", ""),
-        risk=r("serial"),
+        risk="INFO",
         comment=cert.get("serial", {}).get("comment", ""),
-        ok_when_info=bool(cert.get("serial", {}).get("ok")),
-        include=r("serial") != "INFO",
     )
     add_row(
         "Algorithme",
@@ -107,22 +131,11 @@ def build_tls_report(result: dict) -> dict:
         ok_when_info=bool(cert.get("signature", {}).get("ok")),
         include=r("signature") != "INFO",
     )
-    add_row("Empreinte", cert.get("signature", {}).get("fingerprint_sha256", ""), risk=r("fingerprint"), include=r("fingerprint") != "INFO")
     add_row(
-        "Autorite certifiante",
-        cert.get("issuer", {}).get("common_name", ""),
-        risk=r("authority"),
-        comment="Autorite reconnue" if trust.get("is_trusted") else "Autorite non reconnue",
-        ok_when_info=bool(trust.get("is_trusted")),
-        include=r("authority") != "INFO",
-    )
-    add_row(
-        "Auto-signe",
-        trust.get("is_self_signed"),
-        risk=r("self_signed"),
-        comment="Certificat autosigne" if trust.get("is_self_signed") else "Certificat non autosigne",
-        ok_when_info=not trust.get("is_self_signed"),
-        include=r("self_signed") != "INFO",
+        "Empreinte",
+        cert.get("signature", {}).get("fingerprint_sha256", ""),
+        risk=r("fingerprint"),
+        include=r("fingerprint") != "INFO",
     )
     add_row(
         "Cle publique",
@@ -132,6 +145,9 @@ def build_tls_report(result: dict) -> dict:
         ok_when_info=bool(cert.get("public_key", {}).get("ok")),
         include=r("public_key") != "INFO",
     )
+
+    # Section 4: extensions X509 utilisees pour l'usage du certificat.
+    add_section("Extensions du certificat")
     add_row(
         "Basic constraints",
         cert.get("extensions", {}).get("basic_constraints", ""),
@@ -139,14 +155,6 @@ def build_tls_report(result: dict) -> dict:
         comment=cert.get("extensions", {}).get("basic_constraints_comment", ""),
         ok_when_info=bool(cert.get("extensions", {}).get("basic_constraints_ok")),
         include=r("basic_constraints") != "INFO",
-    )
-    add_row(
-        "KU etendu",
-        cert.get("extensions", {}).get("extended_key_usage", ""),
-        risk=r("eku"),
-        comment=cert.get("extensions", {}).get("eku_comment", ""),
-        ok_when_info=bool(cert.get("extensions", {}).get("eku_ok")),
-        include=r("eku") != "INFO",
     )
     add_row(
         "Key usage (KU)",
@@ -157,6 +165,14 @@ def build_tls_report(result: dict) -> dict:
         include=r("ku") != "INFO",
     )
     add_row(
+        "KU etendu",
+        cert.get("extensions", {}).get("extended_key_usage", ""),
+        risk=r("eku"),
+        comment=cert.get("extensions", {}).get("eku_comment", ""),
+        ok_when_info=bool(cert.get("extensions", {}).get("eku_ok")),
+        include=r("eku") != "INFO",
+    )
+    add_row(
         "Liste de revocation",
         cert.get("extensions", {}).get("crl_distribution_points", ""),
         risk=r("crl"),
@@ -164,6 +180,9 @@ def build_tls_report(result: dict) -> dict:
         ok_when_info=bool(cert.get("extensions", {}).get("crl_ok")),
         include=r("crl") != "INFO",
     )
+
+    # Section 5: versions TLS, politique et chiffrement negocie.
+    add_section("Protocole et chiffrement")
     add_row(
         "Version TLS",
         tls.get("negotiated_version", ""),
@@ -178,10 +197,11 @@ def build_tls_report(result: dict) -> dict:
         for version in ["TLS1.0", "TLS1.1", "TLS1.2", "TLS1.3"]:
             risk_key = f"support_{version.lower().replace('.', '')}"
             supported = bool(supported_versions.get(version))
+            row_risk = "INFO" if version in {"TLS1.2", "TLS1.3"} else r(risk_key)
             add_row(
                 f"Support {version}",
                 "Oui" if supported else "Non",
-                risk=r(risk_key),
+                risk=row_risk,
                 comment=(
                     "A desactiver"
                     if version in {"TLS1.0", "TLS1.1"} and supported
@@ -190,7 +210,7 @@ def build_tls_report(result: dict) -> dict:
                     else "Non supporte"
                 ),
                 ok_when_info=(not supported if version in {"TLS1.0", "TLS1.1"} else supported),
-                include=r(risk_key) != "INFO",
+                include=row_risk != "INFO",
             )
 
     add_row(

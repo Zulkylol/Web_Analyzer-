@@ -17,7 +17,6 @@ def compute_tls_risks(result: dict) -> dict:
     risks = {
         "name": "INFO",
         "san": _risk_from_bool(host.get("match"), true_risk="INFO", false_risk="HIGH"),
-        "san_count": "INFO",
         "valid_from": _risk_from_bool(validity.get("is_valid_now")),
         "valid_to": _risk_from_bool(validity.get("expires_ok"), true_risk="INFO", false_risk="HIGH"),
         "cert_version": _risk_from_bool(cert.get("version", {}).get("ok"), true_risk="INFO", false_risk="MEDIUM"),
@@ -37,18 +36,6 @@ def compute_tls_risks(result: dict) -> dict:
         "cipher_bits": "HIGH" if (tls.get("cipher", {}).get("bits") or 0) < 128 else "INFO",
         "weak_ciphers": "INFO",
     }
-    serial = cert.get("serial", {}) or {}
-    serial_ok = serial.get("ok")
-    serial_bitlen = int(serial.get("bitlen") or 0)
-    if serial_ok is False:
-        risks["serial"] = "MEDIUM"
-    elif serial_ok is True and 0 < serial_bitlen < 32:
-        risks["serial"] = "LOW"
-
-    multi_domain_comment = str(host.get("warnings", {}).get("multi_domain", "")).lower()
-    if host.get("ok") is None:
-        risks["san_count"] = "MEDIUM" if "massif" in multi_domain_comment else "LOW"
-
     weak_cipher_support = tls.get("weak_cipher_support", {}) or {}
     if tls.get("weak_cipher_ok") is None:
         risks["weak_ciphers"] = "LOW"
@@ -72,9 +59,9 @@ def compute_tls_risks(result: dict) -> dict:
         supported = bool(s.get(v))
         if v in ("TLS1.0", "TLS1.1"):
             risks[key] = "HIGH" if supported else "INFO"
-        elif v == "TLS1.2":
-            risks[key] = "LOW" if supported else "MEDIUM"
+        elif v in ("TLS1.2", "TLS1.3"):
+            risks[key] = "INFO"
         else:
-            risks[key] = "INFO" if supported else "LOW"
+            risks[key] = "INFO"
 
     return risks

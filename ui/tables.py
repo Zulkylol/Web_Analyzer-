@@ -10,7 +10,7 @@ import ttkbootstrap as ttk
 # ===============================================================
 def clear_tables(http_table,ssl_table,cookies_table):
     """
-    Clear all rows from the HTTP, SSL, and Cookies tables.
+    Clear all rows from the HTTP, TLS, and Cookies tables.
     """
     for item in http_table.get_children():
         http_table.delete(item)
@@ -24,7 +24,7 @@ def clear_tables(http_table,ssl_table,cookies_table):
 # ===============================================================
 def create_result_table(parent, title):
     """
-    Create and return a styled result table (Treeview) with predefined columns and scrollbar.
+    Create and return the standard result table used by every tab.
     """
     frame = ttk.LabelFrame(parent, text=title, font=("Helvetica", 11, "bold"))
     frame.pack(side="left", padx=5, pady=5, fill="both", expand=True)
@@ -40,7 +40,7 @@ def create_result_table(parent, title):
     tree.heading("risk", text="Risque")
     tree.heading("comment", text="Commentaire")
     
-    # ---------------- WIDTH + ALIGNEMENT --------------
+    # La colonne commentaire prend l'espace restant, les autres restent stables.
     tree.column("param", width=220, anchor="w", stretch=False)
     tree.column("value", width=200, anchor="w", stretch=False)
     tree.column("check", width=190, anchor="center", stretch=False)

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from cryptography import x509
-from cryptography.hazmat.primitives import serialization
 
 
 def analyze_public_key(result: dict, x509_cert: x509.Certificate) -> None:
@@ -9,7 +8,7 @@ def analyze_public_key(result: dict, x509_cert: x509.Certificate) -> None:
     Analyze the certificate public key and assess its strength for TLS usage.
 
     Updates result["certificate"]["public_key"] in place with type, size,
-    curve, PEM representation, a validation flag, and a short summary.
+    curve, a validation flag, and a short summary.
     """
     cert_public_key = result["certificate"]["public_key"]
 
@@ -20,14 +19,6 @@ def analyze_public_key(result: dict, x509_cert: x509.Certificate) -> None:
 
         cert_public_key["type"] = pk_type
         cert_public_key["size"] = pk_size
-
-        try:
-            cert_public_key["pem"] = public_key.public_bytes(
-                serialization.Encoding.PEM,
-                serialization.PublicFormat.SubjectPublicKeyInfo,
-            ).decode()
-        except Exception:
-            cert_public_key["pem"] = ""
 
         curve_name = ""
         if hasattr(public_key, "curve") and public_key.curve is not None:

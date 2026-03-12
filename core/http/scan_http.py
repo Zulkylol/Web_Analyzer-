@@ -29,14 +29,15 @@ from utils.url import normalize_url
 
 
 def scan_http_config(url: str) -> dict:
-    raw_url = url
+    """Pipeline HTTP complet: requete, analyse, enrichissement, puis construction du report."""
     normalized_url = normalize_url(url)
-    result = init_http_result(raw_url, normalized_url)
+    result = init_http_result(normalized_url)
     request_headers = {"User-Agent": "Mozilla/5.0"}
 
     try:
         response = fetch_http_response(normalized_url, headers=request_headers, timeout=5)
 
+        # Bloc 1: informations de reponse immediates.
         (
             result["status_code"],
             result["status_message"],
@@ -59,6 +60,7 @@ def scan_http_config(url: str) -> dict:
         ) = detect_http_version(result["final_url"], response, httpx)
         result["http_version_risk"] = evaluate_http_version_risk(result["http_version"])
 
+        # Bloc 2: posture HTTPS et impact sur l'interpretation de l'URL finale.
         (
             result["uses_https"],
             result["https_value"],
@@ -84,7 +86,8 @@ def scan_http_config(url: str) -> dict:
         result["time_ok"], result["time_comment"] = evaluate_response_time(result["time"])
         result["time_risk"] = evaluate_response_time_risk(result["time"])
 
-        result["missing_headers"], result["header_findings"] = scan_security_headers(
+        # Bloc 3: analyse des headers et du contenu HTML.
+        result["header_findings"] = scan_security_headers(
             response.headers,
             SECURITY_HEADERS,
         )
@@ -104,6 +107,7 @@ def scan_http_config(url: str) -> dict:
             result["mixed_content_level"],
         )
 
+        # Bloc 4: exposition annexe (redirections, fichiers standards, methodes HTTP).
         result["redirects"] = scan_redirections(response, normalized_url)
         result["standard_files"] = scan_standard_files(
             result["final_url"],
@@ -122,5 +126,6 @@ def scan_http_config(url: str) -> dict:
         result["comment"] = map_http_scan_error(exc)
         result["errors"]["message"] = result["comment"]
 
+    # Le report est toujours construit, meme en cas d'erreur, pour garder un contrat stable cote UI.
     result["report"] = build_http_report(result)
     return result

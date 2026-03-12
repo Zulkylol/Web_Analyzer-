@@ -3,14 +3,38 @@ from __future__ import annotations
 from core.cookies.policy import SEV_RANK, cookie_sensitivity_flags
 
 
-def select_finding(findings: list[dict], rule_ids: tuple[str, ...]) -> dict | None:
-    matches = [finding for finding in findings if str(finding.get("id", "")) in rule_ids]
+def add_finding(
+    findings: list[dict],
+    category: str,
+    severity: str,
+    cookie_name: str,
+    issue: str,
+    recommendation: str,
+    status: str = "warning",
+) -> None:
+    """Ajoute un finding normalise a la liste des alertes cookies."""
+    findings.append(
+        {
+            "category": category,
+            "severity": severity,
+            "cookie": cookie_name,
+            "status": status,
+            "issue": issue,
+            "recommendation": recommendation,
+        }
+    )
+
+
+def select_finding(findings: list[dict], categories: tuple[str, ...]) -> dict | None:
+    """Retourne le finding le plus severe parmi plusieurs categories equivalentes."""
+    matches = [finding for finding in findings if str(finding.get("category", "")) in categories]
     if not matches:
         return None
     return max(matches, key=lambda finding: SEV_RANK.get(str(finding.get("severity", "info")).lower(), -1))
 
 
 def max_severity(findings: list[dict]) -> str:
+    """Retourne la severite maximale d'une liste de findings cookies."""
     if not findings:
         return "info"
     return max(
@@ -19,7 +43,185 @@ def max_severity(findings: list[dict]) -> str:
     )
 
 
-def build_cookie_assessments(cookie: dict, findings: list[dict]) -> dict:
+def find_scope_collision_names(cookies: list[dict]) -> set[str]:
+    """Detecte les noms de cookie reutilises sur plusieurs couples domaine/path."""
+    scopes_by_name: dict[str, set[tuple[str, str]]] = {}
+    for cookie in cookies:
+        name = str(cookie.get("name", ""))
+        scope = (
+            (cookie.get("domain") or "").lower(),
+            (cookie.get("path") or "/"),
+        )
+        scopes_by_name.setdefault(name, set()).add(scope)
+
+    return {name for name, scopes in scopes_by_name.items() if len(scopes) > 1}
+
+
+def build_scope_collision_findings(duplicate_names: set[str]) -> list[dict]:
+    """Construit les findings globaux de collision de scope."""
+    findings: list[dict] = []
+    for name in sorted(duplicate_names):
+        add_finding(
+            findings,
+            "scope",
+            "low",
+            name,
+            "Meme nom de cookie utilise sur plusieurs scopes domain/path.",
+            "Uniformiser les scopes ou renommer les cookies pour eviter les collisions.",
+        )
+    return findings
+
+
+def build_cookie_findings(cookie: dict) -> list[dict]:
+    """Genere les findings metier pour un cookie donne."""
+    findings: list[dict] = []
+    name = str(cookie.get("name", ""))
+    highly_sensitive, _maybe_sensitive, sensitive = cookie_sensitivity_flags(name)
+    secure = bool(cookie.get("secure"))
+    httponly = bool(cookie.get("httponly"))
+    samesite = (cookie.get("samesite") or "").lower().strip()
+    domain = (cookie.get("domain") or "").strip()
+    path = (cookie.get("path") or "/").strip() or "/"
+    max_age = cookie.get("max_age")
+    persistent = bool(cookie.get("persistent"))
+    size = int(cookie.get("size", 0) or 0)
+    source_scheme = (cookie.get("source_scheme") or "").lower()
+    source_host = (cookie.get("source_host") or "").lower()
+    is_https_cookie = source_scheme == "https"
+
+    # Les checks ci-dessous transforment chaque attribut en risque metier lisible.
+    if not secure and is_https_cookie:
+        add_finding(
+            findings,
+            "secure",
+            "high" if highly_sensitive else "low",
+            name,
+            "Le cookie est servi en HTTPS sans attribut Secure.",
+            "Ajouter Secure pour forcer l'envoi du cookie uniquement en HTTPS.",
+            status="missing",
+        )
+
+    if not httponly and sensitive:
+        add_finding(
+            findings,
+            "httponly",
+            "high" if highly_sensitive else "medium",
+            name,
+            "Cookie de session/authentification sans HttpOnly.",
+            "Ajouter HttpOnly pour limiter l'acces via JavaScript (XSS).",
+            status="missing",
+        )
+
+    if not samesite:
+        add_finding(
+            findings,
+            "samesite",
+            "medium" if sensitive else "low",
+            name,
+            "Attribut SameSite absent.",
+            "Definir SameSite=Lax (ou Strict selon le besoin fonctionnel).",
+            status="missing",
+        )
+
+    if samesite == "none" and not secure:
+        add_finding(
+            findings,
+            "samesite_secure",
+            "high",
+            name,
+            "SameSite=None sans Secure.",
+            "Avec SameSite=None, Secure est requis par les navigateurs modernes.",
+            status="invalid",
+        )
+
+    if samesite and samesite not in {"lax", "strict", "none"}:
+        add_finding(
+            findings,
+            "samesite",
+            "low",
+            name,
+            f"Valeur SameSite non reconnue: {samesite}.",
+            "Utiliser Strict, Lax ou None.",
+            status="invalid",
+        )
+
+    if highly_sensitive and persistent:
+        add_finding(
+            findings,
+            "type",
+            "low",
+            name,
+            "Cookie sensible persistant (non-session).",
+            "Preferer un cookie de session si possible pour les identifiants sensibles.",
+        )
+
+    if highly_sensitive and isinstance(max_age, int) and max_age > 60 * 60 * 24 * 30:
+        add_finding(
+            findings,
+            "type",
+            "medium",
+            name,
+            f"Duree de vie longue pour un cookie sensible ({max_age}s).",
+            "Reduire Max-Age au strict necessaire.",
+        )
+
+    if domain and source_host and domain.startswith(".") and not source_host.endswith(domain.lstrip(".").lower()):
+        add_finding(
+            findings,
+            "domain",
+            "low",
+            name,
+            f"Portee domaine large ({domain}).",
+            "Si possible, restreindre Domain a l'hote le plus specifique.",
+        )
+
+    if highly_sensitive and path == "/":
+        add_finding(
+            findings,
+            "path",
+            "low",
+            name,
+            "Sensitive cookie path is root (/).",
+            "Restrict Path where possible.",
+        )
+
+    if size > 4096:
+        add_finding(
+            findings,
+            "size",
+            "medium",
+            name,
+            f"Taille de cookie elevee ({size} octets, > 4096).",
+            "Reduire la taille pour eviter troncature/rejet par navigateur ou proxy.",
+        )
+
+    if name.startswith("__Host-") and (not secure or domain or path != "/"):
+        add_finding(
+            findings,
+            "secure",
+            "high",
+            name,
+            "Le prefixe __Host- est invalide (regles non respectees).",
+            "__Host- exige Secure, Path=/ et aucun attribut Domain.",
+            status="invalid",
+        )
+
+    if name.startswith("__Secure-") and not secure:
+        add_finding(
+            findings,
+            "secure",
+            "high",
+            name,
+            "Le prefixe __Secure- est utilise sans Secure.",
+            "Ajouter Secure pour respecter les exigences du prefixe __Secure-.",
+            status="invalid",
+        )
+
+    return findings
+
+
+def build_cookie_assessments(cookie: dict, findings: list[dict], *, has_scope_collision: bool = False) -> dict:
+    """Projette les findings d'un cookie en assessments par attribut pour le report detaille."""
     samesite = (cookie.get("samesite") or "").strip().lower()
     domain = (cookie.get("domain") or "").strip()
     path = (cookie.get("path") or "/").strip() or "/"
@@ -27,18 +229,21 @@ def build_cookie_assessments(cookie: dict, findings: list[dict]) -> dict:
     persistent = bool(cookie.get("persistent"))
     _highly_sensitive, _maybe_sensitive, sensitive = cookie_sensitivity_flags(cookie.get("name", ""))
 
-    secure_finding = select_finding(findings, ("CK-001", "CK-004", "CK-011", "CK-012"))
-    httponly_finding = select_finding(findings, ("CK-002",))
-    samesite_finding = select_finding(findings, ("CK-003", "CK-004", "CK-005"))
-    domain_finding = select_finding(findings, ("CK-008",))
-    path_finding = select_finding(findings, ("CK-009",))
-    type_finding = select_finding(findings, ("CK-006", "CK-007"))
-    size_finding = select_finding(findings, ("CK-010",))
+    secure_finding = select_finding(findings, ("secure", "samesite_secure"))
+    httponly_finding = select_finding(findings, ("httponly",))
+    samesite_finding = select_finding(findings, ("samesite", "samesite_secure"))
+    domain_finding = select_finding(findings, ("domain",))
+    path_finding = select_finding(findings, ("path",))
+    type_finding = select_finding(findings, ("type",))
+    size_finding = select_finding(findings, ("size",))
+
+    name_risk = max_severity(findings)
+    if has_scope_collision and SEV_RANK.get(name_risk, -1) < SEV_RANK["low"]:
+        name_risk = "low"
 
     return {
         "name": {
-            "risk": max_severity(findings),
-            "comment": "Nom de cookie observe dans Set-Cookie" if findings else "Nom de cookie observe",
+            "risk": str(name_risk).upper(),
         },
         "secure": {
             "risk": str(secure_finding.get("severity", "info")).upper() if secure_finding else "INFO",

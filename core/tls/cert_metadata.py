@@ -17,7 +17,7 @@ def analyze_metadata(result: dict, x509_cert: x509.Certificate) -> None:
     Updates result["certificate"] in place with validation flags and comments
     regarding:
         - X.509 version (expects v3)
-        - Serial number validity and bit length
+        - Serial number validity
         - Signature hash algorithm strength
         - SHA-256 fingerprint
 
@@ -43,7 +43,6 @@ def analyze_metadata(result: dict, x509_cert: x509.Certificate) -> None:
     sn = x509_cert.serial_number
     bitlen = sn.bit_length()
     cert_serial["hex"] = hex(sn)
-    cert_serial["bitlen"] = bitlen
 
     if sn <= 0:
         cert_serial["ok"] = False

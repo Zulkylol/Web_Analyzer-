@@ -6,7 +6,6 @@
 import ipaddress
 from urllib.parse import urlparse, urljoin
 
-from core.http.urls import analyze_url_transition  # <-- NEW
 from utils.http import shorten_url
 import traceback
 
@@ -31,12 +30,8 @@ def _base_domain(hostname: str | None) -> str:
     return h
 
 
-def _risk_weight(level: str) -> int:
-    order = {"INFO": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3}
-    return order.get(str(level).upper(), 0)
-
-
 def _format_redirect_chain_comment(hop: dict) -> str:
+    """Construit un commentaire compact pour la table des redirections."""
     from_url = str(hop.get("from_url", "") or "")
     location = str(hop.get("location", "") or "")
     hop_url = str(hop.get("url", "") or "")
@@ -69,14 +64,15 @@ def scan_redirections(response, original_url: str) -> dict:
         "redirect_domains": [],
         "redirect_domain_findings": [],
         "redirect_chain": [],
-        "hop_findings": [],
-        "hop_worst_weight": 0,
         "redirect_ips": [],
         "ri_comment": "",
-        "risk": "Info",
     }
 
     # ----------- STORE REDIRECT DOMAINS/IPS ----------------
+    # Chaque saut est analyse pour produire:
+    # - une vue courte de la chaine
+    # - des findings eventuels sur les domaines traverses
+    # - un indicateur d'IP brute si necessaire
 
 
     try:
@@ -106,7 +102,6 @@ def scan_redirections(response, original_url: str) -> dict:
 
         # ---------- PER-DOMAIN RISK CLASSIFICATION ----------
         domain_findings = []
-        worst_domain_risk = "INFO"
         for dom in result["redirect_domains"]:
             dom_base = _base_domain(dom)
             normalized_initial = (initial_domain or "").lower().strip(".")
@@ -117,7 +112,7 @@ def scan_redirections(response, original_url: str) -> dict:
             } == {initial_base_domain, f"www.{initial_base_domain}"} and bool(initial_base_domain)
             if dom in result["redirect_ips"]:
                 risk = "HIGH"
-                comment = "Redirection vers IP brute (pas de nom de domaine)."
+                comment = "Redirection vers IP brute (pas de nom de domaine)"
             elif dom_base == initial_base_domain:
                 if normalized_dom == normalized_initial:
                     risk = "INFO"
@@ -127,14 +122,14 @@ def scan_redirections(response, original_url: str) -> dict:
                     comment = ""
                 else:
                     risk = "LOW"
-                    comment = "Sous-domaine du meme domaine."
+                    comment = "Sous-domaine du meme domaine"
             else:
                 if "xn--" in dom:
                     risk = "HIGH"
-                    comment = "Domaine externe en punycode (verification manuelle recommandee)."
+                    comment = "Domaine externe en punycode (verification manuelle recommandee)"
                 else:
                     risk = "LOW"
-                    comment = "Redirection vers un domaine externe."
+                    comment = "Redirection vers un domaine externe"
 
             domain_findings.append(
                 {
@@ -143,8 +138,6 @@ def scan_redirections(response, original_url: str) -> dict:
                     "comment": comment,
                 }
             )
-            if _risk_weight(risk) > _risk_weight(worst_domain_risk):
-                worst_domain_risk = risk
 
         result["redirect_domain_findings"] = domain_findings
 
@@ -177,112 +170,26 @@ def scan_redirections(response, original_url: str) -> dict:
 
         result["redirect_chain"] = chain
 
-        # ---------------- HOP-BY-HOP ANALYSIS ------------------
-        worst_weight = 0
-
-        for i in range(len(chain) - 1):
-            src = chain[i]["url"]
-            dst = chain[i + 1]["url"]
-
-            try:
-                hop_report = analyze_url_transition(src, dst)
-            except Exception:
-                continue
-
-            # Current analyze_url_transition returns:
-            # (final_url, url_ok, url_comment, url_findings, url_risk)
-            if isinstance(hop_report, tuple) and len(hop_report) >= 5:
-                _, hop_ok, hop_comment, hop_findings, hop_risk = hop_report[:5]
-                weight = _risk_weight(hop_risk) * 30
-                worst_weight = max(worst_weight, weight)
-
-                findings = hop_findings or []
-                if not findings and hop_ok is not True and hop_comment:
-                    findings = [hop_comment]
-
-                for msg in findings:
-                    result["hop_findings"].append(
-                        {
-                            "hop_index": i,
-                            "from": src,
-                            "to": dst,
-                            "message": str(msg),
-                            "risk": str(hop_risk).upper(),
-                        }
-                    )
-            elif isinstance(hop_report, dict):
-                # Backward compatibility if a dict-based report is introduced later.
-                weight = int(hop_report.get("final_weight", 0) or 0)
-                worst_weight = max(worst_weight, weight)
-                findings = hop_report.get("findings", []) or []
-                for f in findings:
-                    if isinstance(f, dict):
-                        result["hop_findings"].append(
-                            {
-                                "hop_index": i,
-                                "from": src,
-                                "to": dst,
-                                **f,
-                            }
-                        )
-                    else:
-                        result["hop_findings"].append(
-                            {
-                                "hop_index": i,
-                                "from": src,
-                                "to": dst,
-                                "message": str(f),
-                            }
-                        )
-
-        result["hop_worst_weight"] = worst_weight
-
-        # Optional: bump overall risk if hop analysis found something severe
-        # (keeps your existing volume/domain/ip risk logic, only escalates)
-        if worst_weight >= 80:
-            result["risk"] = "High"
-        elif worst_weight >= 50 and result["risk"] == "Low":
-            result["risk"] = "Medium"
-
         # --------------- REDIRECTIONS VOLUME -------------------
         if len(history) > 7:
-            result["risk"] = "High"
             result["num_risk"] = "HIGH"
             result["num_comment"] = "Nombre excessif de redirections !"
             result["num_ok"] = False
         elif len(history) > 5:
-            if result["risk"] == "Low":
-                result["risk"] = "Medium"
             result["num_risk"] = "MEDIUM"
-            result["num_comment"] = "Nombre de redirections eleve."
+            result["num_comment"] = "Nombre de redirections eleve"
             result["num_ok"] = None
         elif len(history) > 3:
             result["num_risk"] = "LOW"
-            result["num_comment"] = "Quelques redirections detectees."
+            result["num_comment"] = "Quelques redirections detectees"
             result["num_ok"] = None
         else:
             result["num_risk"] = "INFO"
             result["num_comment"] = "Nombre de redirection(s) normal"
             result["num_ok"] = True
 
-        # --------------- SWITCHING DOMAIN/IP -------------------
-        if initial_domain:
-            for dom in result["redirect_domains"]:
-                if _base_domain(dom) != initial_base_domain and dom not in result["redirect_ips"]:
-                    if result["risk"] == "Low":
-                        result["risk"] = "Medium"
-                    break
-
-        if worst_domain_risk in ("HIGH", "MEDIUM"):
-            if worst_domain_risk == "HIGH":
-                result["risk"] = "High"
-            elif result["risk"] == "Low":
-                result["risk"] = "Medium"
-
         if result["redirect_ips"]:
-            result["ri_comment"] = f"Redirection vers IP brute ({', '.join(result['redirect_ips'])})."
-            if result["risk"] == "Low":
-                result["risk"] = "Medium"
+            result["ri_comment"] = f"Redirection vers IP brute ({', '.join(result['redirect_ips'])})"
 
     except Exception as e:
         tb = traceback.format_exc()

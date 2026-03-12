@@ -15,21 +15,23 @@ from utils.tls import fetch_tls_artifacts, load_x509_certificate, prepare_tls_ta
 
 
 def scan_tls_config(url: str) -> dict:
+    """Pipeline TLS complet: handshake, parsing X509, analyses, calcul des risques, report."""
     normalized_url, hostname, port, hostname_for_match = prepare_tls_target(url)
     result = init_tls_result()
-    result["target"].update({"hostname": hostname, "port": port, "url": normalized_url})
     try:
         artifacts = fetch_tls_artifacts(hostname, port)
         if artifacts.error:
             result["errors"]["message"] = artifacts.error
         else:
+            # On recupere d'abord les artefacts bruts de session TLS.
             result["tls"]["negotiated_version"] = artifacts.negotiated_version
             if artifacts.cipher_tuple:
-                name, proto, bits = artifacts.cipher_tuple
-                result["tls"]["cipher"].update({"name": name, "protocol": proto, "bits": bits})
+                name, _, bits = artifacts.cipher_tuple
+                result["tls"]["cipher"].update({"name": name, "bits": bits})
 
             x509_cert = load_x509_certificate(artifacts.der_cert)
 
+            # Les sous-modules enrichissent chacun une zone precise du resultat.
             analyze_identity(result, x509_cert, hostname_for_match)
             analyze_validity(result, x509_cert)
             analyze_metadata(result, x509_cert)
@@ -40,7 +42,8 @@ def scan_tls_config(url: str) -> dict:
             analyze_cipher_and_weak_ciphers(result, hostname, port)
             result["risks"] = compute_tls_risks(result)
     except Exception as exc:
-        result["errors"]["message"] = f"Erreur TLS : {exc}"
+            result["errors"]["message"] = f"Erreur TLS : {exc}"
 
+    # Le report harmonise la sortie avec HTTP et Cookies.
     result["report"] = build_tls_report(result)
     return result
