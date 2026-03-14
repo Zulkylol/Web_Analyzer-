@@ -59,7 +59,6 @@ def scan_http_config(url: str) -> dict:
             result["http_version_risk"],
         ) = detect_http_version(result["final_url"], httpx)
 
-        # result["http_version_risk"] = evaluate_http_version_risk(result["http_version"])
 
         # Bloc 2: posture HTTPS et impact sur l'interpretation de l'URL finale.
         (
@@ -124,8 +123,7 @@ def scan_http_config(url: str) -> dict:
         )
 
     except Exception as exc:
-        result["comment"] = map_http_scan_error(exc)
-        result["errors"]["message"] = result["comment"]
+        result["errors"]["message"] = map_http_scan_error(exc)
 
     # Le report est toujours construit, meme en cas d'erreur, pour garder un contrat stable cote UI.
     result["report"] = build_http_report(result)

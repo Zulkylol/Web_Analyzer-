@@ -9,7 +9,7 @@ def build_http_report(result: dict) -> dict:
     rows: list[dict] = []
     redirects = result.get("redirects") or {}
     mixed_urls = result.get("mixed_url") or []
-    error_message = str(result.get("comment", "") or "")
+    error_message = str((result.get("errors") or {}).get("message", "") or "")
 
     def add_row(param, value="", *, risk="INFO", comment="", ok_when_info=False, check=None, tags=(), include=False):
         rows.append(
