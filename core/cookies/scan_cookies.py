@@ -21,6 +21,9 @@ from core.cookies.summary import (
 from utils.url import normalize_url
 
 
+# ===============================================================
+# FUNCTION : scan_cookies_config
+# ===============================================================
 def scan_cookies_config(url: str) -> dict:
     """Pipeline cookies: requete, parsing Set-Cookie, evaluations, resume, puis report."""
     result = init_cookies_result()

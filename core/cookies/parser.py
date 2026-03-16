@@ -6,7 +6,16 @@ from urllib.parse import urlparse
 import requests
 
 
+# ===============================================================
+# FUNCTION : to_int
+# ===============================================================
 def to_int(value: str | None) -> int | None:
+    """
+    Convert a text value to an integer.
+
+    Returns :
+        int | None : parsed integer
+    """
     if value is None:
         return None
     try:
@@ -15,7 +24,16 @@ def to_int(value: str | None) -> int | None:
         return None
 
 
+# ===============================================================
+# FUNCTION : extract_set_cookie_headers
+# ===============================================================
 def extract_set_cookie_headers(response: requests.Response) -> list[str]:
+    """
+    Extract Set-Cookie headers from a response.
+
+    Returns :
+        list[str] : cookie header lines
+    """
     values = []
     raw_headers = getattr(response, "raw", None)
     raw_headers = getattr(raw_headers, "headers", None)
@@ -30,7 +48,16 @@ def extract_set_cookie_headers(response: requests.Response) -> list[str]:
     return [v for v in values if v]
 
 
+# ===============================================================
+# FUNCTION : parse_cookie_line
+# ===============================================================
 def parse_cookie_line(set_cookie_line: str) -> dict | None:
+    """
+    Parse a single Set-Cookie header line.
+
+    Returns :
+        dict | None : parsed cookie data
+    """
     parts = [p.strip() for p in set_cookie_line.split(";") if p.strip()]
     if not parts or "=" not in parts[0]:
         return None
@@ -73,7 +100,16 @@ def parse_cookie_line(set_cookie_line: str) -> dict | None:
     }
 
 
+# ===============================================================
+# FUNCTION : deduplicate_cookies
+# ===============================================================
 def deduplicate_cookies(cookies: list[dict]) -> list[dict]:
+    """
+    Remove duplicate cookie entries.
+
+    Returns :
+        list[dict] : unique cookies
+    """
     deduped: list[dict] = []
     seen: set[tuple] = set()
 
@@ -97,7 +133,16 @@ def deduplicate_cookies(cookies: list[dict]) -> list[dict]:
     return deduped
 
 
+# ===============================================================
+# FUNCTION : collect_response_cookies
+# ===============================================================
 def collect_response_cookies(response: requests.Response) -> list[dict]:
+    """
+    Collect cookies from the full response chain.
+
+    Returns :
+        list[dict] : collected cookies
+    """
     parsed_cookies = []
     all_responses = list(response.history) + [response]
 

@@ -8,8 +8,18 @@ from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 
+from constants import HEADER
 
+
+# ===============================================================
+# FUNCTION : evaluate_mixed_content_risk
+# ===============================================================
 def evaluate_mixed_content_risk(mixed_detected: bool, mixed_level: str) -> str:
+    """
+    Assess the risk associated with detected mixed content
+    returns :
+        str : risk level 
+    """
     level = str(mixed_level or "").lower()
     if level == "active":
         return "HIGH"
@@ -41,7 +51,7 @@ def detect_mixed_content(
 
     soup = BeautifulSoup(html, "html.parser")
 
-    tags_attrs = {
+    tag_attributes = {
         "img": ["src", "srcset"],
         "script": ["src"],
         "link": ["href"],
@@ -54,45 +64,48 @@ def detect_mixed_content(
 
     mixed: list[tuple[str, str]] = []
     active_tags = {"script", "iframe", "form"}
-    active_attr = {("link", "href")}
+    active_attributes = {("link", "href")}
     has_active_mixed = False
 
-    for tag, attrs in tags_attrs.items():
-        for elem in soup.find_all(tag):
-            for attr in attrs:
-                val = elem.get(attr)
-                if not val:
+    # Detect HTTP resources in HTML tag attributes.
+    for tag, attributes in tag_attributes.items():
+        for element in soup.find_all(tag):
+            for attribute in attributes:
+                attribute_value = element.get(attribute)
+                if not attribute_value:
                     continue
 
-                if attr == "srcset":
-                    for part in str(val).split(","):
-                        u = part.strip().split(" ")[0]
-                        if u.startswith("http://"):
-                            mixed.append((u, f"{tag}[srcset]"))
+                if attribute == "srcset":
+                    for srcset_entry in str(attribute_value).split(","):
+                        url = srcset_entry.strip().split(" ")[0]
+                        if url.startswith("http://"):
+                            mixed.append((url, f"{tag}[srcset]"))
                             if tag in active_tags:
                                 has_active_mixed = True
-                elif isinstance(val, str) and val.startswith("http://"):
-                    mixed.append((val, f"{tag}[{attr}]"))
-                    if tag in active_tags or (tag, attr) in active_attr:
+                elif isinstance(attribute_value, str) and attribute_value.startswith("http://"):
+                    mixed.append((attribute_value, f"{tag}[{attribute}]"))
+                    if tag in active_tags or (tag, attribute) in active_attributes:
                         has_active_mixed = True
 
-    for elem in soup.find_all(style=True):
-        css = elem.get("style") or ""
-        for u in re.findall(r'url\(\s*["\']?(http://[^"\')\s]+)', css):
-            mixed.append((u, "inline-style"))
+    #inline HTTP URLs
+    for element in soup.find_all(style=True):
+        css = element.get("style") or ""
+        for url in re.findall(r'url\(\s*["\']?(http://[^"\')\s]+)', css):
+            mixed.append((url, "inline-style"))
 
+    #inline External CSS
     for link in soup.find_all("link", href=True):
-        rel = link.get("rel") or []
-        if any(str(r).lower() == "stylesheet" for r in rel):
+        link_rel = link.get("rel") or []
+        if any(str(r).lower() == "stylesheet" for r in link_rel):
             css_url = urljoin(final_url, link["href"])
             try:
                 css_resp = requests.get(
                     css_url,
-                    headers={"User-Agent": "Mozilla/5.0"},
+                    headers=HEADER.copy(),
                     timeout=3,
                 )
-                for u in re.findall(r'url\(\s*["\']?(http://[^"\')\s]+)', css_resp.text):
-                    mixed.append((u, "external-css"))
+                for found_url in re.findall(r'url\(\s*["\']?(http://[^"\')\s]+)', css_resp.text):
+                    mixed.append((found_url, "external-css"))
             except Exception:
                 pass
 

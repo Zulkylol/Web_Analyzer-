@@ -4,6 +4,9 @@ from constants import STATUS_ICON
 from core.reporting import build_report, make_row, make_section_row
 
 
+# ===============================================================
+# FUNCTION : build_cookies_report
+# ===============================================================
 def build_cookies_report(result: dict) -> dict:
     """Transforme le resultat cookies brut en lignes ordonnees pour l'UI."""
     rows: list[dict] = []
@@ -14,7 +17,16 @@ def build_cookies_report(result: dict) -> dict:
     sensitive_cookies = int(summary.get("sensitive_cookies", 0) or 0)
     error_message = str(result.get("error", "") or "")
 
+    # ===============================================================
+    # FUNCTION : add_row
+    # ===============================================================
     def add_row(param, value="", *, risk="INFO", comment="", ok_when_info=False, check=None, tags=(), include=False):
+        """
+        Append a report row.
+
+        Returns :
+            None : no return
+        """
         rows.append(
             make_row(
                 param,
@@ -28,7 +40,16 @@ def build_cookies_report(result: dict) -> dict:
             )
         )
 
+    # ===============================================================
+    # FUNCTION : add_section
+    # ===============================================================
     def add_section(title: str):
+        """
+        Append a section row.
+
+        Returns :
+            None : no return
+        """
         rows.append(make_section_row(title))
 
     if error_message:
@@ -69,7 +90,7 @@ def build_cookies_report(result: dict) -> dict:
                 include=severity != "INFO",
             )
             if finding.get("recommendation"):
-                add_row("", "-> Recommandation", comment=finding["recommendation"])
+                add_row("", "", comment="➩ Recommandation: "+finding["recommendation"], check="", tags=("recommendation",))
     else:
         add_row("Findings cookies", "-", risk="INFO", comment="Aucun probleme de configuration cookie detecte.", check=STATUS_ICON["ok"])
 

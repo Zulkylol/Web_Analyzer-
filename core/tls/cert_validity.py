@@ -4,46 +4,49 @@
 # IMPORTS
 # ===============================================================
 from __future__ import annotations
+
 from datetime import datetime, timezone
+
 from cryptography import x509
 
+
 # ===============================================================
-# FUNCTION : analyze_validity()
+# FUNCTION : analyze_validity
 # ===============================================================
-def analyze_validity(result: dict, x509_cert: x509.Certificate) -> None:
+def analyze_validity(x509_cert: x509.Certificate) -> dict:
     """
     Check certificate validity dates and expiration status.
 
-    Updates result["certificate"]["validity"] in place with current
-    validity state and remaining lifetime evaluation.
-
-    Args:
-        result (dict): Analysis dictionary to update.
-        x509_cert (x509.Certificate): Parsed certificate.
+    Returns:
+        dict: Validity analysis block.
     """
-    cert_validity = result["certificate"]["validity"]
-
-    cert_validity["not_before"] = x509_cert.not_valid_before_utc.isoformat()
-    cert_validity["not_after"] = x509_cert.not_valid_after_utc.isoformat()
+    validity = {
+        "not_before": x509_cert.not_valid_before_utc.isoformat(),
+        "not_after": x509_cert.not_valid_after_utc.isoformat(),
+        "is_valid_now": False,
+        "expires_ok": False,
+        "expires_soon_comment": "",
+    }
     now = datetime.now(timezone.utc)
 
     try:
         not_before = x509_cert.not_valid_before_utc
         not_after = x509_cert.not_valid_after_utc
-
-        cert_validity["is_valid_now"] = not_before <= now <= not_after
+        validity["is_valid_now"] = not_before <= now <= not_after
         days_left = (not_after - now).days
 
         if days_left < 0:
-            cert_validity["expires_ok"] = False
-            cert_validity["expires_soon_comment"] = "Certificat expiré."
+            validity["expires_ok"] = False
+            validity["expires_soon_comment"] = "Certificat expire."
         elif days_left < 30:
-            cert_validity["expires_ok"] = None
-            cert_validity["expires_soon_comment"] = f"⚠️ Certificat expire bientôt ({days_left} jours restants)."
+            validity["expires_ok"] = None
+            validity["expires_soon_comment"] = f"Certificat expire bientot ({days_left} jours restants)."
         else:
-            cert_validity["expires_ok"] = True
-            cert_validity["expires_soon_comment"] = f"Validité confortable ({days_left} jours restants)."
+            validity["expires_ok"] = True
+            validity["expires_soon_comment"] = f"Validite confortable ({days_left} jours restants)."
     except Exception:
-        cert_validity["is_valid_now"] = False
-        cert_validity["expires_ok"] = None
-        cert_validity["expires_soon_comment"] = "Impossible d'évaluer la validité."
+        validity["is_valid_now"] = False
+        validity["expires_ok"] = None
+        validity["expires_soon_comment"] = "Impossible d'evaluer la validite."
+
+    return validity

@@ -11,12 +11,18 @@ RISK_ORDER = {
 }
 
 
+# ===============================================================
+# FUNCTION : normalize_risk
+# ===============================================================
 def normalize_risk(risk: str, default: str = "INFO") -> str:
     """Normalise les niveaux de risque pour eviter les variantes incoherentes."""
     risk_text = str(risk or "").strip().upper()
     return risk_text if risk_text in RISK_ORDER else default
 
 
+# ===============================================================
+# FUNCTION : icon_for_risk
+# ===============================================================
 def icon_for_risk(risk: str, ok_when_info: bool = False) -> str:
     """Associe un niveau de risque a l'icone affichee dans les tableaux."""
     risk_u = normalize_risk(risk)
@@ -29,6 +35,9 @@ def icon_for_risk(risk: str, ok_when_info: bool = False) -> str:
     return STATUS_ICON["ok"] if ok_when_info else STATUS_ICON["info"]
 
 
+# ===============================================================
+# FUNCTION : make_row
+# ===============================================================
 def make_row(
     param: str,
     value="",
@@ -53,6 +62,9 @@ def make_row(
     }
 
 
+# ===============================================================
+# FUNCTION : make_section_row
+# ===============================================================
 def make_section_row(title: str) -> dict:
     """Construit une ligne de separation visuelle entre sections d'un onglet."""
     return {
@@ -67,8 +79,12 @@ def make_section_row(title: str) -> dict:
     }
 
 
+# ===============================================================
+# FUNCTION : _public_row
+# ===============================================================
 def _public_row(row: dict) -> dict:
     """Nettoie une ligne interne avant exposition dans le report final."""
+    tags = list(row.get("tags", []))
     if row.get("is_section"):
         return {
             "param": row.get("param", ""),
@@ -76,7 +92,16 @@ def _public_row(row: dict) -> dict:
             "check": "",
             "risk": "",
             "comment": "",
-            "tags": list(row.get("tags", [])),
+            "tags": tags,
+        }
+    if "recommendation" in tags:
+        return {
+            "param": row.get("param", ""),
+            "value": row.get("value", ""),
+            "check": row.get("check", ""),
+            "risk": "",
+            "comment": row.get("comment", ""),
+            "tags": tags,
         }
     return {
         "param": row.get("param", ""),
@@ -84,10 +109,13 @@ def _public_row(row: dict) -> dict:
         "check": row.get("check", ""),
         "risk": normalize_risk(row.get("risk", "INFO")),
         "comment": row.get("comment", ""),
-        "tags": list(row.get("tags", [])),
+        "tags": tags,
     }
 
 
+# ===============================================================
+# FUNCTION : compute_overall_risk
+# ===============================================================
 def compute_overall_risk(rows: list[dict]) -> str:
     """Retourne le risque le plus eleve parmi une liste de lignes/findings."""
     if not rows:
@@ -95,6 +123,9 @@ def compute_overall_risk(rows: list[dict]) -> str:
     return max((normalize_risk(row.get("risk", "INFO")) for row in rows), key=lambda risk: RISK_ORDER[risk])
 
 
+# ===============================================================
+# FUNCTION : build_report
+# ===============================================================
 def build_report(source: str, rows: list[dict], *, error_message: str = "") -> dict:
     """Assemble la structure finale lue par l'UI et la synthese globale."""
     public_rows = [_public_row(row) for row in rows]
@@ -102,8 +133,13 @@ def build_report(source: str, rows: list[dict], *, error_message: str = "") -> d
     # Les compteurs de synthese globale se basent uniquement sur les findings.
     high_findings = sum(1 for finding in findings if normalize_risk(finding.get("risk", "INFO")) in {"HIGH", "CRITICAL"})
     medium_findings = sum(1 for finding in findings if normalize_risk(finding.get("risk", "INFO")) == "MEDIUM")
-    # Les lignes de section ne doivent pas gonfler artificiellement le nombre de lignes "analysees".
-    data_rows = [row for row in public_rows if "section_header" not in row.get("tags", [])]
+    # Les lignes purement visuelles ou d'aide ne doivent pas gonfler artificiellement
+    # le nombre de lignes "analysees".
+    data_rows = [
+        row
+        for row in public_rows
+        if "section_header" not in row.get("tags", []) and "recommendation" not in row.get("tags", [])
+    ]
 
     return {
         "source": source,

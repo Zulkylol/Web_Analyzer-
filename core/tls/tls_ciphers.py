@@ -4,56 +4,59 @@
 # IMPORTS
 # ===============================================================
 from __future__ import annotations
+
 import ssl
+
 from utils.tls import server_accepts_cipher
 
+
 # ===============================================================
-# FUNCTION : analyze_cipher_and_weak_ciphers()
+# FUNCTION : analyze_cipher_and_weak_ciphers
 # ===============================================================
-def analyze_cipher_and_weak_ciphers(result: dict, hostname: str, port: int) -> None:
+def analyze_cipher_and_weak_ciphers(
+    cipher_name: str,
+    cipher_bits: int,
+    supported_versions: dict,
+    hostname: str,
+    port: int,
+) -> tuple[bool | None, str, dict, bool | None, str]:
     """
     Evaluate the negotiated cipher and test support for weak ciphers.
 
-    Assesses cipher strength (algorithm and key size) and checks whether
-    the server still accepts legacy/weak ciphers under TLS ≤ 1.2.
-
-    Updates result["tls"] in place with:
-        - cipher validation (ok/comment)
-        - weak_cipher_support results
-        - weak_cipher_ok (bool)
-        - weak_cipher_comment (str)
-
-    Args:
-        result (dict): Analysis dictionary to update.
-        hostname (str): Target host.
-        port (int): Target port.
+    Returns:
+        tuple[bool | None, str, dict, bool | None, str]:
+            - cipher_ok
+            - cipher_comment
+            - weak_cipher_support
+            - weak_cipher_ok
+            - weak_cipher_comment
     """
-    tls = result["tls"]
-    tls_cipher = tls["cipher"]
-    support = tls.get("supported_versions", {})
-
-    name = tls_cipher.get("name", "")
-    bits = tls_cipher.get("bits", 0)
-
     weak_algorithms = ["RC4", "3DES", "DES", "MD5"]
-    if any(w in name for w in weak_algorithms):
-        tls_cipher["ok"] = False
-        tls_cipher["comment"] = "Cipher faible détectée (RC4/3DES/DES/MD5)"
-    elif bits and bits < 128:
-        tls_cipher["ok"] = False
-        tls_cipher["comment"] = "Taille de clé inférieure à 128 bits"
-    elif "GCM" in name or "CHACHA20" in name:
-        tls_cipher["ok"] = True
-        tls_cipher["comment"] = "Cipher moderne sécurisée (AEAD)"
+    if any(algorithm in cipher_name for algorithm in weak_algorithms):
+        cipher_ok = False
+        cipher_comment = "Cipher faible detectee (RC4/3DES/DES/MD5)"
+    elif cipher_bits and cipher_bits < 128:
+        cipher_ok = False
+        cipher_comment = "Taille de cle inferieure a 128 bits"
+    elif "GCM" in cipher_name or "CHACHA20" in cipher_name:
+        cipher_ok = True
+        cipher_comment = "Cipher moderne securisee (AEAD)"
     else:
-        tls_cipher["ok"] = True
-        tls_cipher["comment"] = "Cipher acceptable."
+        cipher_ok = True
+        cipher_comment = "Cipher acceptable."
 
-    # Weak cipher tests
-    if not (support.get("TLS1.0") or support.get("TLS1.1") or support.get("TLS1.2")):
-        tls["weak_cipher_support"] = {}
-        tls["weak_cipher_comment"] = "Serveur uniquement TLS 1.3 → pas de ciphers legacy testables"
-        return
+    if not (
+        supported_versions.get("TLS1.0")
+        or supported_versions.get("TLS1.1")
+        or supported_versions.get("TLS1.2")
+    ):
+        return (
+            cipher_ok,
+            cipher_comment,
+            {},
+            True,
+            "Serveur uniquement TLS 1.3 -> pas de ciphers legacy testables",
+        )
 
     weak_cipher_tests = {
         "3DES": "DES-CBC3-SHA",
@@ -62,17 +65,21 @@ def analyze_cipher_and_weak_ciphers(result: dict, hostname: str, port: int) -> N
         "MD5": "RSA-MD5",
     }
 
-    weak_results = {}
-    for n, cipher in weak_cipher_tests.items():
-        accepted = server_accepts_cipher(hostname, port, ssl.TLSVersion.TLSv1_2, cipher)
-        weak_results[n] = accepted
+    weak_cipher_support = {}
+    for weak_name, cipher_string in weak_cipher_tests.items():
+        weak_cipher_support[weak_name] = server_accepts_cipher(
+            hostname,
+            port,
+            ssl.TLSVersion.TLSv1_2,
+            cipher_string,
+        )
 
-    tls["weak_cipher_support"] = weak_results
-
-    if any(weak_results.values()):
-        tls["weak_cipher_ok"] = False
-        bad = [k for k, v in weak_results.items() if v]
-        tls["weak_cipher_comment"] = f"Le serveur accepte encore : {', '.join(bad)}"
+    if any(weak_cipher_support.values()):
+        accepted_weak_ciphers = [name for name, accepted in weak_cipher_support.items() if accepted]
+        weak_cipher_ok = False
+        weak_cipher_comment = f"Le serveur accepte encore : {', '.join(accepted_weak_ciphers)}"
     else:
-        tls["weak_cipher_ok"] = True
-        tls["weak_cipher_comment"] = "Aucun cipher faible accepté"
+        weak_cipher_ok = True
+        weak_cipher_comment = "Aucun cipher faible accepte"
+
+    return cipher_ok, cipher_comment, weak_cipher_support, weak_cipher_ok, weak_cipher_comment

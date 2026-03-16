@@ -28,7 +28,16 @@ MAYBE_SENSITIVE_COOKIE_RE = re.compile(
 SEV_RANK = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
 
 
+# ===============================================================
+# FUNCTION : cookie_sensitivity_flags
+# ===============================================================
 def cookie_sensitivity_flags(name: str) -> tuple[bool, bool, bool]:
+    """
+    Classify cookie name sensitivity.
+
+    Returns :
+        tuple[bool, bool, bool] : sensitivity flags
+    """
     name_l = name.lower().strip()
     highly_sensitive = name_l in HIGHLY_SENSITIVE_COOKIE_NAMES
     maybe_sensitive = bool(MAYBE_SENSITIVE_COOKIE_RE.search(name_l))

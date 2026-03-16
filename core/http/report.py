@@ -4,14 +4,30 @@ from constants import STATUS_ICON
 from core.reporting import build_report, icon_for_risk, make_row, make_section_row
 
 
+# ===============================================================
+# FUNCTION : build_http_report
+# ===============================================================
 def build_http_report(result: dict) -> dict:
     """Transforme le resultat HTTP brut en lignes ordonnees pour l'UI."""
     rows: list[dict] = []
-    redirects = result.get("redirects") or {}
-    mixed_urls = result.get("mixed_url") or []
+    target = result.get("target") or {}
+    transport = result.get("transport") or {}
+    content = result.get("content") or {}
+    exposure = result.get("exposure") or {}
+    redirects = exposure.get("redirects") or {}
+    mixed_urls = content.get("mixed_url") or []
     error_message = str((result.get("errors") or {}).get("message", "") or "")
 
+    # ===============================================================
+    # FUNCTION : add_row
+    # ===============================================================
     def add_row(param, value="", *, risk="INFO", comment="", ok_when_info=False, check=None, tags=(), include=False):
+        """
+        Append a report row.
+
+        Returns :
+            None : no return
+        """
         rows.append(
             make_row(
                 param,
@@ -25,13 +41,22 @@ def build_http_report(result: dict) -> dict:
             )
         )
 
+    # ===============================================================
+    # FUNCTION : add_section
+    # ===============================================================
     def add_section(title: str):
+        """
+        Append a section row.
+
+        Returns :
+            None : no return
+        """
         rows.append(make_section_row(title))
 
     if error_message:
         add_row(
             "Erreur HTTP",
-            result.get("status_message", ""),
+            transport.get("status_message", ""),
             risk="HIGH",
             comment=error_message,
             check=STATUS_ICON["high"],
@@ -41,48 +66,56 @@ def build_http_report(result: dict) -> dict:
 
     # Section 1: cible initiale, transport final et metriques de base.
     add_section("Cible et transport")
-    add_row("URL saisie", result.get("original_url", ""), comment="URL normalisee utilisee pour le scan")
+    add_row("URL saisie", target.get("original_url", ""), comment="URL normalisee utilisee pour le scan")
 
-    https_risk = result.get("https_risk", "MEDIUM")
-    uses_https = bool(result.get("uses_https"))
+    if target.get("has_url_credentials"):
+        add_row(
+            "Credentials dans l'URL",
+            "Oui",
+            risk="HIGH",
+            comment="Credentials detectes dans l'URL",
+            include=True,
+        )
+
+    https_risk = transport.get("https_risk", "MEDIUM")
+    uses_https = bool(transport.get("uses_https"))
     add_row(
         "HTTPS active",
-        result.get("https_value", "Oui" if uses_https else "Non"),
+        transport.get("https_value", "Oui" if uses_https else "Non"),
         risk=https_risk,
-        comment=result.get("https_comment", ""),
+        comment=transport.get("https_comment", ""),
         ok_when_info=uses_https,
         include=str(https_risk).upper() != "INFO",
     )
 
-    url_risk = result.get("url_risk", "INFO")
     add_row(
         "URL finale",
-        result.get("final_url", ""),
-        risk=url_risk,
-        comment=result.get("url_comment", ""),
-        ok_when_info=bool(result.get("url_ok")),
-        include=str(url_risk).upper() != "INFO",
+        target.get("final_url", ""),
+        risk=str(target.get("url_risk", "INFO")).upper(),
+        comment=target.get("url_comment", ""),
+        ok_when_info=bool(target.get("url_ok")),
+        include=str(target.get("url_risk", "INFO")).upper() != "INFO",
     )
 
-    status_risk = result.get("status_risk", "INFO")
+    status_risk = transport.get("status_risk", "INFO")
     add_row(
         "Code de statut",
-        str(result.get("status_code", "")),
+        str(transport.get("status_code", "")),
         risk=status_risk,
-        comment=result.get("status_message", ""),
-        ok_when_info=bool(result.get("status_ok")),
+        comment=transport.get("status_message", ""),
+        ok_when_info=bool(transport.get("status_ok")),
         include=str(status_risk).upper() != "INFO",
     )
 
-    http_version = result.get("http_version") or ""
+    http_version = transport.get("http_version") or ""
     if http_version:
-        http_risk = result.get("http_version_risk", "MEDIUM")
+        http_risk = transport.get("http_version_risk", "MEDIUM")
         add_row(
             "Version HTTP",
             http_version,
             risk=http_risk,
-            comment=result.get("http_comment", ""),
-            ok_when_info=bool(result.get("http_ok")),
+            comment=transport.get("http_comment", ""),
+            ok_when_info=bool(transport.get("http_ok")),
             include=str(http_risk).upper() != "INFO",
         )
     else:
@@ -95,18 +128,27 @@ def build_http_report(result: dict) -> dict:
             include=True,
         )
 
-    time_risk = result.get("time_risk", "INFO")
+    time_risk = transport.get("time_risk", "INFO")
     add_row(
         "Temps de reponse",
-        result.get("time", 0.0),
+        transport.get("time", 0.0),
         risk=time_risk,
-        comment=result.get("time_comment", ""),
-        ok_when_info=bool(result.get("time_ok")),
+        comment=transport.get("time_comment", ""),
+        ok_when_info=bool(transport.get("time_ok")),
         include=str(time_risk).upper() != "INFO",
     )
 
     # Section 2: comportement de redirection entre l'URL saisie et la cible finale.
     add_section("Redirections")
+    redirect_error = str(redirects.get("error", "") or "")
+    if redirect_error:
+        add_row(
+            "Redirections",
+            "Erreur",
+            risk="MEDIUM",
+            comment=redirect_error,
+            include=True,
+        )
     num_risk = str(redirects.get("num_risk", "INFO")).upper()
     add_row(
         "Nombre de redirections",
@@ -157,17 +199,17 @@ def build_http_report(result: dict) -> dict:
             add_row("Chaine de redirections" if index == 1 else "", str(hop_status), comment=comment)
 
     # Section 3: securite du contenu recu et des headers de protection.
-    if uses_https or result.get("header_findings"):
+    if uses_https or content.get("header_findings"):
         add_section("Securite de contenu / headers")
 
     if uses_https:
-        mixed = bool(result.get("mixed_content"))
-        mixed_risk = str(result.get("mixed_content_risk", "INFO")).upper()
+        mixed = bool(content.get("mixed_content"))
+        mixed_risk = str(content.get("mixed_content_risk", "INFO")).upper()
         add_row(
             "Contenu mixte",
             "Oui" if mixed else "Non",
             risk=mixed_risk,
-            comment=result.get("mixed_comment", ""),
+            comment=content.get("mixed_comment", ""),
             ok_when_info=not mixed,
             include=mixed_risk != "INFO",
         )
@@ -185,7 +227,7 @@ def build_http_report(result: dict) -> dict:
                 check=icon_for_risk(mixed_risk or "MEDIUM"),
             )
 
-    header_findings = result.get("header_findings") or []
+    header_findings = content.get("header_findings") or []
     if header_findings:
         header_idx = 0
         for finding in header_findings:
@@ -203,11 +245,11 @@ def build_http_report(result: dict) -> dict:
                 include=severity != "INFO",
             )
             if finding.get("recommendation"):
-                add_row("", "-> Recommandation", comment=finding["recommendation"])
+                add_row("", "", comment="➩ Recommandation: "+finding["recommendation"], check="", tags=("recommendation",))
 
     # Section 4: surface d'exposition annexe autour de la cible HTTP.
     add_section("Exposition")
-    standard_files = result.get("standard_files") or []
+    standard_files = exposure.get("standard_files") or []
     if standard_files:
         for index, item in enumerate(standard_files, start=1):
             name = item.get("name", "")
@@ -230,7 +272,7 @@ def build_http_report(result: dict) -> dict:
                 include=risk != "INFO",
             )
 
-    methods = result.get("methods_exposure") or {}
+    methods = exposure.get("methods_exposure") or {}
     methods_risk = str(methods.get("risk", "INFO")).upper()
     add_row(
         "Methodes HTTP exposees",

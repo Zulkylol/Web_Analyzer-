@@ -21,6 +21,9 @@ from utils.url import normalize_url
 # ===============================================================
 # FUNCTION : is_chain_trusted_by_mozilla()
 # ===============================================================    
+# ===============================================================
+# FUNCTION : is_chain_trusted_by_mozilla
+# ===============================================================
 def is_chain_trusted_by_mozilla(url: str, timeout=5) -> tuple[bool, str]:
     """
     Verify if a server's TLS certificate chain is trusted (Mozilla CA bundle).
@@ -50,6 +53,9 @@ def is_chain_trusted_by_mozilla(url: str, timeout=5) -> tuple[bool, str]:
 # ===============================================================
 # FUNCTION : server_supports_tls_version()
 # ===============================================================   
+# ===============================================================
+# FUNCTION : server_supports_tls_version
+# ===============================================================
 def server_supports_tls_version(url: str, tls_version: ssl.TLSVersion, timeout=5) -> bool:
     """
     Test whether a server supports a specific TLS version by attempting a handshake.
@@ -78,6 +84,9 @@ def server_supports_tls_version(url: str, tls_version: ssl.TLSVersion, timeout=5
 # ===============================================================
 # FUNCTION : server_accepts_cipher()
 # ===============================================================  
+# ===============================================================
+# FUNCTION : server_accepts_cipher
+# ===============================================================
 def server_accepts_cipher(hostname, port, tls_version, cipher_string):
     """
     Check whether a server accepts a specific cipher suite for a given TLS version.
@@ -103,6 +112,9 @@ def server_accepts_cipher(hostname, port, tls_version, cipher_string):
         return False
 
 
+# ===============================================================
+# FUNCTION : prepare_tls_target
+# ===============================================================
 def prepare_tls_target(url: str) -> tuple[str, str, int, str]:
     """Normalise l'URL et extrait les parametres reseau utiles au scan TLS."""
     normalized_url = normalize_url(url)
@@ -122,12 +134,15 @@ class TLSArtifacts:
     error: str = ""
 
 
+# ===============================================================
+# FUNCTION : load_x509_certificate
+# ===============================================================
 def load_x509_certificate(der_cert: bytes) -> x509.Certificate:
     """Convertit le certificat DER brut en objet X509 exploitable par `cryptography`."""
     return x509.load_der_x509_certificate(der_cert, default_backend())
 
 # ===============================================================
-# FUNCTION : fetch_tls_artifacts()
+# FUNCTION : fetch_tls_artifacts
 # ===============================================================
 def fetch_tls_artifacts(hostname: str, port: int, timeout: int = 5) -> TLSArtifacts:
     """

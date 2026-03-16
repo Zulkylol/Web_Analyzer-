@@ -4,81 +4,89 @@
 # IMPORTS
 # ===============================================================
 from __future__ import annotations
+
 from cryptography import x509
 
+
 # ===============================================================
-# FUNCTION : analyze_extensions(result, x509_cert)
+# FUNCTION : analyze_extensions
 # ===============================================================
-def analyze_extensions(result: dict, x509_cert: x509.Certificate) -> None:
+def analyze_extensions(x509_cert: x509.Certificate) -> dict:
     """
     Extract and validate common X.509 extensions for a TLS server certificate.
 
-    Updates result["certificate"]["extensions"] in place with string
-    values and basic validation flags/comments.
-
-    Args:
-        result (dict): Analysis dictionary to update.
-        x509_cert (x509.Certificate): Parsed certificate object.
+    Returns:
+        dict: Extensions analysis block.
     """
-    cert_ext = result["certificate"]["extensions"]
+    extensions = {
+        "key_usage": "",
+        "extended_key_usage": "",
+        "basic_constraints": "",
+        "crl_distribution_points": "",
+        "basic_constraints_ok": None,
+        "basic_constraints_comment": "",
+        "eku_ok": None,
+        "eku_comment": "",
+        "ku_ok": None,
+        "ku_comment": "",
+        "crl_ok": None,
+        "crl_comment": "",
+    }
 
-    # dump extensions as string
-    for ext_class, key in [
+    for extension_class, key in [
         (x509.BasicConstraints, "basic_constraints"),
         (x509.KeyUsage, "key_usage"),
         (x509.ExtendedKeyUsage, "extended_key_usage"),
         (x509.CRLDistributionPoints, "crl_distribution_points"),
     ]:
         try:
-            ext = x509_cert.extensions.get_extension_for_class(ext_class)
-            cert_ext[key] = str(ext.value)
+            extension = x509_cert.extensions.get_extension_for_class(extension_class)
+            extensions[key] = str(extension.value)
         except Exception:
             pass
 
-    # BasicConstraints
-    bc = cert_ext["basic_constraints"]
-    if bc:
-        if "CA=True" in bc:
-            cert_ext["basic_constraints_ok"] = False
-            cert_ext["basic_constraints_comment"] = "Certificat marqué comme CA (anormal pour serveur)."
+    basic_constraints = extensions["basic_constraints"]
+    if basic_constraints:
+        if "CA=True" in basic_constraints:
+            extensions["basic_constraints_ok"] = False
+            extensions["basic_constraints_comment"] = "Certificat marque comme CA (anormal pour serveur)."
         else:
-            cert_ext["basic_constraints_ok"] = True
-            cert_ext["basic_constraints_comment"] = "Certificat non CA."
+            extensions["basic_constraints_ok"] = True
+            extensions["basic_constraints_comment"] = "Certificat non CA."
     else:
-        cert_ext["basic_constraints_ok"] = None
-        cert_ext["basic_constraints_comment"] = "BasicConstraints absent."
+        extensions["basic_constraints_ok"] = None
+        extensions["basic_constraints_comment"] = "BasicConstraints absent."
 
-    # EKU
-    eku = cert_ext["extended_key_usage"]
-    if eku:
-        if "serverAuth" in eku or "TLS Web Server Authentication" in eku:
-            cert_ext["eku_ok"] = True
-            cert_ext["eku_comment"] = "EKU autorise l'authentification serveur."
+    extended_key_usage = extensions["extended_key_usage"]
+    if extended_key_usage:
+        if "serverAuth" in extended_key_usage or "TLS Web Server Authentication" in extended_key_usage:
+            extensions["eku_ok"] = True
+            extensions["eku_comment"] = "EKU autorise l'authentification serveur."
         else:
-            cert_ext["eku_ok"] = False
-            cert_ext["eku_comment"] = "EKU ne contient pas serverAuth."
+            extensions["eku_ok"] = False
+            extensions["eku_comment"] = "EKU ne contient pas serverAuth."
     else:
-        cert_ext["eku_ok"] = None
-        cert_ext["eku_comment"] = "EKU absent."
+        extensions["eku_ok"] = None
+        extensions["eku_comment"] = "EKU absent."
 
-    # KU
-    ku = cert_ext["key_usage"]
-    if ku:
-        if "digital_signature" in ku:
-            cert_ext["ku_ok"] = True
-            cert_ext["ku_comment"] = "digitalSignature présent."
+    key_usage = extensions["key_usage"]
+    if key_usage:
+        if "digital_signature" in key_usage:
+            extensions["ku_ok"] = True
+            extensions["ku_comment"] = "digitalSignature present."
         else:
-            cert_ext["ku_ok"] = False
-            cert_ext["ku_comment"] = "digitalSignature absent."
+            extensions["ku_ok"] = False
+            extensions["ku_comment"] = "digitalSignature absent."
     else:
-        cert_ext["ku_ok"] = None
-        cert_ext["ku_comment"] = "KeyUsage absent."
+        extensions["ku_ok"] = None
+        extensions["ku_comment"] = "KeyUsage absent."
 
-    # CRL
-    crl = cert_ext["crl_distribution_points"]
-    if crl:
-        cert_ext["crl_ok"] = True
-        cert_ext["crl_comment"] = "Point(s) de révocation indiqué(s)."
+    crl_distribution_points = extensions["crl_distribution_points"]
+    if crl_distribution_points:
+        extensions["crl_ok"] = True
+        extensions["crl_comment"] = "Point(s) de revocation indique(s)."
     else:
-        cert_ext["crl_ok"] = None
-        cert_ext["crl_comment"] = "Aucun point CRL indiqué."
+        extensions["crl_ok"] = None
+        extensions["crl_comment"] = "Aucun point CRL indique."
+
+    return extensions

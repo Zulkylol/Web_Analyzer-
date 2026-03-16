@@ -6,6 +6,9 @@ from ttkbootstrap.constants import INFO, SUCCESS, WARNING
 from ui.tables import create_result_table
 
 
+# ===============================================================
+# FUNCTION : build_main_window
+# ===============================================================
 def build_main_window(start_scan, open_settings, open_report, on_table_select, sync_http_options):
     """Construit la fenetre principale et retourne les references utiles au controleur."""
     root = ttk.Window(themename="cosmo")
@@ -108,14 +111,14 @@ def build_main_window(start_scan, open_settings, open_report, on_table_select, s
     summary_high_var = ttk.StringVar(value="0")
     summary_risk_var = ttk.StringVar(value="-")
 
-    summary_box = ttk.LabelFrame(tab_summary, text="Synthese", font=("Helvetica", 11, "bold"))
+    summary_box = ttk.LabelFrame(tab_summary, text="Synthèse", font=("Helvetica", 11, "bold"))
     summary_box.pack(fill="x", padx=14, pady=14)
 
     # Les cartes du resume se repartissent uniformement sur la largeur.
     for col in range(4):
         summary_box.columnconfigure(col, weight=1, uniform="summary")
 
-    ttk.Label(summary_box, text="Lignes analysees", font=("Helvetica", 11, "bold"), anchor="center", justify="center").grid(row=0, column=0, padx=24, pady=(10, 4), sticky="ew")
+    ttk.Label(summary_box, text="Lignes analysées", font=("Helvetica", 11, "bold"), anchor="center", justify="center").grid(row=0, column=0, padx=24, pady=(10, 4), sticky="ew")
     ttk.Label(summary_box, textvariable=summary_scan_rows_var, font=("Helvetica", 16, "bold"), anchor="center", justify="center").grid(row=1, column=0, padx=24, pady=(0, 10), sticky="ew")
     ttk.Label(summary_box, text="Alertes totales", font=("Helvetica", 11, "bold"), anchor="center", justify="center").grid(row=0, column=1, padx=24, pady=(10, 4), sticky="ew")
     ttk.Label(summary_box, textvariable=summary_alerts_var, font=("Helvetica", 16, "bold"), anchor="center", justify="center").grid(row=1, column=1, padx=24, pady=(0, 10), sticky="ew")
@@ -126,7 +129,7 @@ def build_main_window(start_scan, open_settings, open_report, on_table_select, s
 
     ttk.Label(
         tab_summary,
-        text="Astuce: s\u00e9lectionne une ligne dans HTTP/TLS/Cookies pour voir le d\u00e9tail complet ci-dessous.",
+        text="S\u00e9lectionne une ligne dans HTTP/TLS/Cookies pour voir le d\u00e9tail complet ci-dessous.",
     ).pack(anchor="w", padx=14, pady=(0, 10))
 
     summary_table = create_result_table(tab_summary, "Alertes consolid\u00e9es")
@@ -138,7 +141,8 @@ def build_main_window(start_scan, open_settings, open_report, on_table_select, s
     for tree in (summary_table, http_table, ssl_table, cookies_table):
         tree.tag_configure("zebra_even", background="#ffffff")
         tree.tag_configure("zebra_odd", background="#f3f6fa")
-        tree.tag_configure("section_header", font=("Helvetica", 10, "bold"), background="#e7edf3")
+        tree.tag_configure("section_header", font=("Helvetica", 10, "bold"), background="#6c757d", foreground="#ffffff")
+        tree.tag_configure("recommendation", font=("Helvetica", 9, "italic"))
 
     cookies_table.tag_configure("cookie_name", font=("Helvetica", 10, "bold"))
 

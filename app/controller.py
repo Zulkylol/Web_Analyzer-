@@ -15,7 +15,16 @@ from ui.tables import clear_tables
 class WebAnalyzerApp:
     """Controleur principal: relie l'interface, les scans et la synthese globale."""
 
+    # ===============================================================
+    # FUNCTION : __init__
+    # ===============================================================
     def __init__(self) -> None:
+        """
+        Initialize the main app controller.
+
+        Returns :
+            None : no return
+        """
         self.selected_language = "fr"
         self.settings_window = None
         self.scan_results = {
@@ -57,14 +66,23 @@ class WebAnalyzerApp:
         self.sync_http_options()
         self.refresh_summary_view()
 
+    # ===============================================================
+    # FUNCTION : run
+    # ===============================================================
     def run(self) -> None:
         """Launch of TK mainloop"""
         self.root.mainloop()
 
+    # ===============================================================
+    # FUNCTION : clear_tree
+    # ===============================================================
     def clear_tree(self, tree) -> None:
         """Delete all the lines of a table"""
         tree.delete(*tree.get_children())
 
+    # ===============================================================
+    # FUNCTION : launch_scan
+    # ===============================================================
     def launch_scan(self) -> None:
         """Prepare l'UI, normalise l'URL d'entree et demarre le scan hors thread UI."""
         clear_tables(self.http_table, self.ssl_table, self.cookies_table)
@@ -94,6 +112,9 @@ class WebAnalyzerApp:
         # Le scan tourne en arriere-plan pour garder l'interface fluide.
         threading.Thread(target=self.scan_in_background, args=(url,), daemon=True).start()
 
+    # ===============================================================
+    # FUNCTION : scan_in_background
+    # ===============================================================
     def scan_in_background(self, url: str) -> None:
         """Execute les scans actifs puis met a jour les tables et la synthese."""
         try:
@@ -143,6 +164,9 @@ class WebAnalyzerApp:
             self.open_report_button.config(state="normal")
             self.go_button.config(state="normal")
 
+    # ===============================================================
+    # FUNCTION : build_progress_plan
+    # ===============================================================
     def build_progress_plan(self) -> dict:
         """Repartit la barre selon le cout estime de HTTP, TLS et Cookies."""
         enabled_phases = []
@@ -171,6 +195,9 @@ class WebAnalyzerApp:
             "finish": 100.0,
         }
 
+    # ===============================================================
+    # FUNCTION : set_progress
+    # ===============================================================
     def set_progress(self, value: float, style: str | None = None, allow_decrease: bool = False) -> None:
         """Met a jour la barre, avec option explicite pour la reinitialiser."""
         current = float(self.progress_bar["value"])
@@ -183,6 +210,9 @@ class WebAnalyzerApp:
             self.progress_bar.configure(bootstyle=style)
         self.root.update_idletasks()
 
+    # ===============================================================
+    # FUNCTION : open_settings
+    # ===============================================================
     def open_settings(self) -> None:
         """Ouvre une petite fenetre de parametres centree sur la fenetre principale."""
         if self.settings_window is not None and self.settings_window.winfo_exists():
@@ -198,7 +228,16 @@ class WebAnalyzerApp:
         settings_win.resizable(False, False)
         settings_win.transient(self.root)
         settings_win.grab_set()
+        # ===============================================================
+        # FUNCTION : close_settings
+        # ===============================================================
         def close_settings():
+            """
+            Close the settings window.
+
+            Returns :
+                None : no return
+            """
             self.settings_window = None
             settings_win.destroy()
 
@@ -227,7 +266,16 @@ class WebAnalyzerApp:
             text="Français est la langue par défaut.",
         ).pack(anchor="w", pady=(8, 14))
 
+        # ===============================================================
+        # FUNCTION : save_settings
+        # ===============================================================
         def save_settings():
+            """
+            Save the selected UI language.
+
+            Returns :
+                None : no return
+            """
             self.selected_language = lang_choices.get(lang_var.get(), "fr")
             messagebox.showinfo(
                 "Paramètres",
@@ -240,10 +288,16 @@ class WebAnalyzerApp:
         ttk.Button(actions, text="Enregistrer", bootstyle="success", command=save_settings).pack(side="left")
         ttk.Button(actions, text="Annuler", bootstyle="secondary", command=close_settings).pack(side="left", padx=8)
 
+    # ===============================================================
+    # FUNCTION : open_report
+    # ===============================================================
     def open_report(self) -> None:
         """Placeholder pour une future fonctionnalite d'export/ouverture de rapport."""
         messagebox.showinfo("Report")
 
+    # ===============================================================
+    # FUNCTION : sync_http_options
+    # ===============================================================
     def sync_http_options(self) -> None:
         """Active 'Forcer HTTPS' uniquement quand le module HTTP est coche."""
         if self.scan_http_var.get():
@@ -252,10 +306,16 @@ class WebAnalyzerApp:
             self.force_https_var.set(0)
             self.force_https_check.config(state="disabled")
 
+    # ===============================================================
+    # FUNCTION : is_summary_risk
+    # ===============================================================
     def is_summary_risk(self, risk: str) -> bool:
         """Filtre les niveaux qui doivent remonter dans l'onglet global."""
         return str(risk or "").strip().upper() in {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
 
+    # ===============================================================
+    # FUNCTION : refresh_summary_table
+    # ===============================================================
     def refresh_summary_table(self) -> None:
         """Consolide les findings des trois modules dans la table globale."""
         self.clear_tree(self.summary_table)
@@ -276,6 +336,9 @@ class WebAnalyzerApp:
 
         display_report_rows({"rows": summary_rows}, self.summary_table)
 
+    # ===============================================================
+    # FUNCTION : refresh_summary_view
+    # ===============================================================
     def refresh_summary_view(self) -> None:
         """Met a jour les compteurs de synthese a partir des reports deja calcules."""
         self.refresh_summary_table()
@@ -305,6 +368,9 @@ class WebAnalyzerApp:
         self.summary_high_var.set(str(high_alerts))
         self.summary_risk_var.set(risk)
 
+    # ===============================================================
+    # FUNCTION : on_table_select
+    # ===============================================================
     def on_table_select(self, event) -> None:
         """Affiche le detail complet de la ligne selectionnee sous les onglets."""
         tree = event.widget

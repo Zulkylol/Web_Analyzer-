@@ -1,4 +1,13 @@
+# ===============================================================
+# FUNCTION : _risk_from_bool
+# ===============================================================
 def _risk_from_bool(status, true_risk="INFO", false_risk="HIGH", none_risk="MEDIUM"):
+    """
+    Map a boolean-like status to a risk.
+
+    Returns :
+        str : risk level
+    """
     if status is True:
         return true_risk
     if status is False:
@@ -6,7 +15,16 @@ def _risk_from_bool(status, true_risk="INFO", false_risk="HIGH", none_risk="MEDI
     return none_risk
 
 
+# ===============================================================
+# FUNCTION : compute_tls_risks
+# ===============================================================
 def compute_tls_risks(result: dict) -> dict:
+    """
+    Compute all TLS risk levels.
+
+    Returns :
+        dict : risk mapping
+    """
     cert = result.get("certificate", {})
     tls = result.get("tls", {})
     trust = result.get("trust", {})

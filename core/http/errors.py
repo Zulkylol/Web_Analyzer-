@@ -1,9 +1,22 @@
+# core/http/errors.py
+
+# ===============================================================
+# IMPORTS
+# ===============================================================
 from __future__ import annotations
 
 import requests
 
-
+# ===============================================================
+# FUNCTION : map_http_scan_error
+# ===============================================================
 def map_http_scan_error(exc: Exception) -> str:
+    """
+    Convert request exceptions into a readable HTTP scan error message.
+
+    Returns : 
+        str : readable error
+    """
     if isinstance(exc, requests.exceptions.SSLError):
         txt = repr(exc)
         if "CERTIFICATE_VERIFY_FAILED" in txt and "unable to get local issuer certificate" in txt:

@@ -14,6 +14,9 @@ from core.tls.trust import analyze_trust
 from utils.tls import fetch_tls_artifacts, load_x509_certificate, prepare_tls_target
 
 
+# ===============================================================
+# FUNCTION : scan_tls_config
+# ===============================================================
 def scan_tls_config(url: str) -> dict:
     """Pipeline TLS complet: handshake, parsing X509, analyses, calcul des risques, report."""
     normalized_url, hostname, port, hostname_for_match = prepare_tls_target(url)
@@ -31,18 +34,62 @@ def scan_tls_config(url: str) -> dict:
 
             x509_cert = load_x509_certificate(artifacts.der_cert)
 
-            # Les sous-modules enrichissent chacun une zone precise du resultat.
-            analyze_identity(result, x509_cert, hostname_for_match)
-            analyze_validity(result, x509_cert)
-            analyze_metadata(result, x509_cert)
-            analyze_public_key(result, x509_cert)
-            analyze_extensions(result, x509_cert)
-            analyze_trust(result, x509_cert, normalized_url)
-            analyze_tls_versions_and_policy(result, normalized_url)
-            analyze_cipher_and_weak_ciphers(result, hostname, port)
+            (
+                result["certificate"]["subject"],
+                result["certificate"]["issuer"],
+                result["hostname_check"],
+            ) = analyze_identity(x509_cert, hostname_for_match)
+
+            result["certificate"]["validity"] = analyze_validity(x509_cert)
+
+            (
+                result["certificate"]["version"],
+                result["certificate"]["serial"],
+                result["certificate"]["signature"],
+            ) = analyze_metadata(x509_cert)
+
+            result["certificate"]["public_key"] = analyze_public_key(x509_cert)
+            result["certificate"]["extensions"] = analyze_extensions(x509_cert)
+
+            (
+                result["trust"],
+                result["tls"]["negotiated_version"],
+                trust_error,
+            ) = analyze_trust(
+                x509_cert,
+                normalized_url,
+                result["tls"]["negotiated_version"],
+            )
+            if trust_error and not result["errors"]["message"]:
+                result["errors"]["message"] = trust_error
+
+            (
+                result["tls"]["nv_ok"],
+                result["tls"]["nv_comment"],
+                result["tls"]["supported_versions"],
+                result["tls"]["policy"],
+            ) = analyze_tls_versions_and_policy(
+                result["tls"]["negotiated_version"],
+                normalized_url,
+            )
+
+            (
+                result["tls"]["cipher"]["ok"],
+                result["tls"]["cipher"]["comment"],
+                result["tls"]["weak_cipher_support"],
+                result["tls"]["weak_cipher_ok"],
+                result["tls"]["weak_cipher_comment"],
+            ) = analyze_cipher_and_weak_ciphers(
+                result["tls"]["cipher"].get("name", ""),
+                result["tls"]["cipher"].get("bits", 0),
+                result["tls"]["supported_versions"],
+                hostname,
+                port,
+            )
+
             result["risks"] = compute_tls_risks(result)
     except Exception as exc:
-            result["errors"]["message"] = f"Erreur TLS : {exc}"
+        result["errors"]["message"] = f"Erreur TLS : {exc}"
 
     # Le report harmonise la sortie avec HTTP et Cookies.
     result["report"] = build_tls_report(result)

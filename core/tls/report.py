@@ -4,16 +4,37 @@ from constants import STATUS_ICON
 from core.reporting import build_report, make_row, make_section_row
 
 
+# ===============================================================
+# FUNCTION : build_tls_report
+# ===============================================================
 def build_tls_report(result: dict) -> dict:
     """Transforme le resultat TLS brut en lignes ordonnees pour l'UI."""
     rows: list[dict] = []
     risks = result.get("risks", {}) or {}
     error_message = str((result.get("errors") or {}).get("message", "") or "")
 
+    # ===============================================================
+    # FUNCTION : r
+    # ===============================================================
     def r(key: str, default: str = "INFO") -> str:
+        """
+        Read a normalized risk value.
+
+        Returns :
+            str : normalized risk
+        """
         return str(risks.get(key, default)).upper()
 
+    # ===============================================================
+    # FUNCTION : add_row
+    # ===============================================================
     def add_row(param, value="", *, risk="INFO", comment="", ok_when_info=False, check=None, tags=(), include=False):
+        """
+        Append a report row.
+
+        Returns :
+            None : no return
+        """
         rows.append(
             make_row(
                 param,
@@ -27,7 +48,16 @@ def build_tls_report(result: dict) -> dict:
             )
         )
 
+    # ===============================================================
+    # FUNCTION : add_section
+    # ===============================================================
     def add_section(title: str):
+        """
+        Append a section row.
+
+        Returns :
+            None : no return
+        """
         rows.append(make_section_row(title))
 
     if error_message:
@@ -40,8 +70,13 @@ def build_tls_report(result: dict) -> dict:
     hostname_check = result.get("hostname_check", {})
 
     # Section 1: identite du certificat presentee par le serveur.
-    add_section("Identite du certificat")
-    add_row("Nom", cert.get("subject", {}).get("common_name", ""), risk=r("name"), include=r("name") != "INFO")
+    add_section("Identité du certificat")
+    add_row(
+        "Nom", 
+        cert.get("subject", {}).get("common_name", ""), 
+        risk=r("name"), 
+        comment ="Nom commun (CN) du certificat",
+        include=r("name") != "INFO")
 
     san = cert.get("subject", {}).get("san_dns", []) or []
     if san:
@@ -60,7 +95,7 @@ def build_tls_report(result: dict) -> dict:
             "Subject Alternative Name",
             "Aucun SAN",
             risk="HIGH",
-            comment="Extension SAN absente (certificat legacy / config atypique)",
+            comment="Extension SAN absente (certificat legacy / configuration atypique)",
             check=STATUS_ICON["missing"],
             include=True,
         )
@@ -75,18 +110,18 @@ def build_tls_report(result: dict) -> dict:
     # Section 2: confiance de la chaine et statut autosigne.
     add_section("Confiance")
     add_row(
-        "Autorite certifiante",
+        "Autorité certifiante",
         cert.get("issuer", {}).get("common_name", ""),
         risk=r("authority"),
-        comment="Autorite reconnue" if trust.get("is_trusted") else "Autorite non reconnue",
+        comment="Autorité reconnue" if trust.get("is_trusted") else "Autorité non reconnue",
         ok_when_info=bool(trust.get("is_trusted")),
         include=r("authority") != "INFO",
     )
     add_row(
-        "Auto-signe",
+        "Autosigné",
         trust.get("is_self_signed"),
         risk=r("self_signed"),
-        comment="Certificat autosigne" if trust.get("is_self_signed") else "Certificat non autosigne",
+        comment="Certificat autosigné" if trust.get("is_self_signed") else "Certificat non autosigné",
         ok_when_info=not trust.get("is_self_signed"),
         include=r("self_signed") != "INFO",
     )
@@ -94,15 +129,15 @@ def build_tls_report(result: dict) -> dict:
     # Section 3: metadonnees generales du certificat.
     add_section("Metadonnees du certificat")
     add_row(
-        "Debut de validite",
+        "Debut de validité",
         cert.get("validity", {}).get("not_before", ""),
         risk=r("valid_from"),
-        comment="Certificat valide" if cert.get("validity", {}).get("is_valid_now") else "Certificat expire",
+        comment="Certificat valide" if cert.get("validity", {}).get("is_valid_now") else "Certificat expiré",
         ok_when_info=bool(cert.get("validity", {}).get("is_valid_now")),
         include=r("valid_from") != "INFO",
     )
     add_row(
-        "Fin de validite",
+        "Fin de validité",
         cert.get("validity", {}).get("not_after", ""),
         risk=r("valid_to"),
         comment=cert.get("validity", {}).get("expires_soon_comment", ""),
@@ -118,7 +153,7 @@ def build_tls_report(result: dict) -> dict:
         include=r("cert_version") != "INFO",
     )
     add_row(
-        "Serial number",
+        "Numéro de série",
         cert.get("serial", {}).get("hex", ""),
         risk="INFO",
         comment=cert.get("serial", {}).get("comment", ""),
@@ -135,10 +170,11 @@ def build_tls_report(result: dict) -> dict:
         "Empreinte",
         cert.get("signature", {}).get("fingerprint_sha256", ""),
         risk=r("fingerprint"),
+        comment="Hash SHA-256 du certificat",
         include=r("fingerprint") != "INFO",
     )
     add_row(
-        "Cle publique",
+        "Clé publique",
         cert.get("public_key", {}).get("summary", ""),
         risk=r("public_key"),
         comment=cert.get("public_key", {}).get("comment", ""),
@@ -165,7 +201,7 @@ def build_tls_report(result: dict) -> dict:
         include=r("ku") != "INFO",
     )
     add_row(
-        "KU etendu",
+        "KU étendu",
         cert.get("extensions", {}).get("extended_key_usage", ""),
         risk=r("eku"),
         comment=cert.get("extensions", {}).get("eku_comment", ""),
@@ -173,7 +209,7 @@ def build_tls_report(result: dict) -> dict:
         include=r("eku") != "INFO",
     )
     add_row(
-        "Liste de revocation",
+        "Liste de révocation",
         cert.get("extensions", {}).get("crl_distribution_points", ""),
         risk=r("crl"),
         comment=cert.get("extensions", {}).get("crl_comment", ""),
@@ -230,9 +266,10 @@ def build_tls_report(result: dict) -> dict:
         include=r("cipher") != "INFO",
     )
     add_row(
-        "Taille de cle (bits)",
+        "Taille de clé (bits)",
         tls.get("cipher", {}).get("bits", 0),
         risk=r("cipher_bits"),
+        comment="Taille de la clé publique du certificat",
         include=r("cipher_bits") != "INFO",
     )
     add_row(

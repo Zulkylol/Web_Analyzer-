@@ -6,9 +6,11 @@
 from http_status_codes import HTTP_STATUS_CODES
 from urllib.parse import urlparse, urlunparse
 
+from utils.http import is_apex_www_pair, normalize_hostname, shorten_url
+
 
 # ===============================================================
-# FUNCTION : evaluate_status(response)
+# FUNCTION : evaluate_status
 # ===============================================================
 def evaluate_status(response) -> tuple[int, str, bool | None]:
     """
@@ -32,22 +34,22 @@ def evaluate_status(response) -> tuple[int, str, bool | None]:
     return status_code, status_message, status_ok
 
 # ===============================================================
-# FUNCTION : detect_http_version(url)
+# FUNCTION : detect_http_version
 # ===============================================================
 def detect_http_version(url: str, httpx_module) -> tuple[str, bool | None, str, str]:
     """
     Detect the negotiated HTTP protocol version with httpx.
 
     Returns:
-        tuple[str, bool | None, str]:
-            (http_version, http_ok, http_comment)
+        tuple[str, bool | None, str, str]:
+            (http_version, http_ok, http_comment, http_risk)
     """
     try:
         with httpx_module.Client(http2=True, timeout=5) as client:
             response = client.get(url)
             http_version = str(getattr(response, "http_version", "") or "").upper()
     except Exception as exc:
-        return "Inconnue", None, f"Impossible de determiner la version HTTP via httpx: {exc}"
+        return "Inconnue", None, f"Impossible de determiner la version HTTP via httpx: {exc}", "MEDIUM"
 
     if http_version in ("HTTP/3", "HTTP/2", "HTTP/1.1"):
         http_ok = True
@@ -66,6 +68,49 @@ def detect_http_version(url: str, httpx_module) -> tuple[str, bool | None, str, 
     return http_version, http_ok, http_comment, http_risk
 
 
+# ===============================================================
+# FUNCTION : analyze_url_transition
+# ===============================================================
+def analyze_url_transition(original_url: str, final_url: str) -> tuple[str, bool | None, str, str, bool]:
+    """
+    Analyze the transition between the original URL and the final URL.
+
+    Returns:
+        tuple[str, bool | None, str, str, bool]:
+            (final_url, url_ok, url_comment, url_risk, has_url_credentials)
+    """
+
+    original_parsed = urlparse(original_url)
+    final_parsed = urlparse(final_url)
+    original_host = normalize_hostname(original_parsed.hostname)
+    final_host = normalize_hostname(final_parsed.hostname)
+    has_host_change = bool(
+        original_host and final_host and original_host != final_host and not is_apex_www_pair(original_host, final_host)
+    )
+    has_url_credentials = bool(
+        original_parsed.username
+        or original_parsed.password
+        or final_parsed.username
+        or final_parsed.password
+    )
+    host_change_message = f"Changement d'hote ({shorten_url(original_url)} ⇒ {shorten_url(final_url)})"
+
+    url_ok = True
+    url_comment = "OK"
+    url_risk = "INFO"
+    if has_host_change:
+        url_ok = None
+        url_comment = host_change_message
+
+    if has_host_change:
+        url_risk = "LOW"
+
+    return final_url, url_ok, url_comment, url_risk, has_url_credentials
+
+
+# ===============================================================
+# FUNCTION : evaluate_https_posture
+# ===============================================================
 def evaluate_https_posture(
     original_url: str,
     final_url: str,
@@ -116,23 +161,30 @@ def evaluate_https_posture(
             )
             https_probe_ok = str(getattr(probe_resp, "url", "")).lower().startswith("https://")
         except Exception:
-            https_probe_ok = False
+            pass
 
     # Detect HTTP->HTTPS upgrade through redirects seen by requests.
     redirect_upgrade = False
+    redirect_downgrade = False
     try:
         history = list(getattr(response, "history", []) or [])
         if history:
             first_scheme = urlparse(history[0].url).scheme.lower()
             last_scheme = urlparse(getattr(response, "url", "")).scheme.lower()
             redirect_upgrade = first_scheme == "http" and last_scheme == "https"
+            redirect_downgrade = first_scheme == "https" and last_scheme == "http"
         else:
             redirect_upgrade = (
                 parsed_original.scheme.lower() == "http"
                 and parsed_final.scheme.lower() == "https"
             )
+            redirect_downgrade = (
+                parsed_original.scheme.lower() == "https"
+                and parsed_final.scheme.lower() == "http"
+            )
     except Exception:
         redirect_upgrade = False
+        redirect_downgrade = False
 
     if uses_https:
         if redirect_upgrade:
@@ -147,12 +199,19 @@ def evaluate_https_posture(
         https_risk = "LOW"
     else:
         https_value = "Non"
-        https_comment = "HTTPS non detecte (ni URL finale HTTPS, ni probe HTTPS concluante)."
-        https_risk = "MEDIUM"
+        if redirect_downgrade:
+            https_comment = "HTTPS redirige vers HTTP (downgrade detecte)"
+            https_risk = "HIGH"
+        else:
+            https_comment = "HTTPS non detecte (ni URL finale HTTPS, ni probe HTTPS concluante)."
+            https_risk = "MEDIUM"
 
     return uses_https, https_value, https_comment, https_risk
 
 
+# ===============================================================
+# FUNCTION : adjust_url_risk_with_https_posture
+# ===============================================================
 def adjust_url_risk_with_https_posture(
     url_risk: str,
     final_url: str,
@@ -179,7 +238,7 @@ def adjust_url_risk_with_https_posture(
 
 
 # ===============================================================
-# FUNCTION : evaluate_response_time(seconds)
+# FUNCTION : evaluate_response_time
 # ===============================================================
 def evaluate_response_time(seconds: float) -> tuple[bool | None, str]:
     """
@@ -199,6 +258,9 @@ def evaluate_response_time(seconds: float) -> tuple[bool | None, str]:
     else:
         return False, "Très lent ou proche timeout"
 
+# ===============================================================
+# FUNCTION : evaluate_response_time_risk
+# ===============================================================
 def evaluate_response_time_risk(seconds: float) -> str:
     """
     Risk policy for response time.

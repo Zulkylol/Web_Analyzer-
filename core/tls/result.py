@@ -1,7 +1,7 @@
 # core/tls/result.py
 
 # ===============================================================
-# FUNCTION : init_tls_result()
+# FUNCTION : init_tls_result
 # ===============================================================
 def init_tls_result() -> dict:
     """

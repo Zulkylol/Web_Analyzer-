@@ -3,7 +3,16 @@ from __future__ import annotations
 from core.cookies.policy import SEV_RANK, cookie_sensitivity_flags
 
 
+# ===============================================================
+# FUNCTION : max_severity
+# ===============================================================
 def max_severity(findings: list[dict]) -> str:
+    """
+    Get the highest finding severity.
+
+    Returns :
+        str : max severity
+    """
     if not findings:
         return "info"
     return max(
@@ -12,7 +21,16 @@ def max_severity(findings: list[dict]) -> str:
     )
 
 
+# ===============================================================
+# FUNCTION : sort_findings_by_severity
+# ===============================================================
 def sort_findings_by_severity(findings: list[dict]) -> list[dict]:
+    """
+    Sort findings by severity.
+
+    Returns :
+        list[dict] : sorted findings
+    """
     return sorted(
         findings,
         key=lambda finding: SEV_RANK.get(str(finding.get("severity", "info")).lower(), -1),
@@ -20,7 +38,16 @@ def sort_findings_by_severity(findings: list[dict]) -> list[dict]:
     )
 
 
+# ===============================================================
+# FUNCTION : cookie_count_risk
+# ===============================================================
 def cookie_count_risk(total_cookies: int, sensitive_cookies: int) -> str:
+    """
+    Rate cookie volume risk.
+
+    Returns :
+        str : risk level
+    """
     if total_cookies <= 10:
         return "info"
     if total_cookies <= 20:
@@ -30,7 +57,16 @@ def cookie_count_risk(total_cookies: int, sensitive_cookies: int) -> str:
     return "high" if sensitive_cookies >= 5 else "medium"
 
 
+# ===============================================================
+# FUNCTION : count_sensitive_cookies
+# ===============================================================
 def count_sensitive_cookies(cookies: list[dict]) -> int:
+    """
+    Count sensitive cookies.
+
+    Returns :
+        int : sensitive count
+    """
     sensitive_count = 0
 
     for cookie in cookies:

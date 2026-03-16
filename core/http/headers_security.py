@@ -9,16 +9,15 @@ import re
 from typing import Any, Mapping
 
 # ===============================================================
-# FUNCTION : _lower_sev(sev)
+# FUNCTION : _lower_sev
 # ===============================================================
 def _lower_sev(sev: str) -> str:
     """
     Compute the next lower severity level.
-
+  
     Returns : 
         str : lower security level
     """
-    # Certaines recommandations derivent le niveau attendu en "un cran plus bas".
     inv = {v: k for k, v in SEV_ORDER.items()}
     v = SEV_ORDER.get(sev, 0)
     return inv.get(max(0, v - 1), "info")
@@ -62,7 +61,7 @@ def _parse_directives(header_value: str) -> dict[str, str]:
     return directives
 
 # ===============================================================
-# FUNCTION : scan_security_headers()
+# FUNCTION : scan_security_headers
 # ===============================================================
 def scan_security_headers(
     headers: Mapping[str, Any],
@@ -77,12 +76,18 @@ def scan_security_headers(
     # Chaque finding est deja pense pour pouvoir etre remonte tel quel dans le report HTTP.
     findings: list[dict[str, Any]] = []
 
+    # ===============================================================
+    # FUNCTION : expected
+    # ===============================================================
     def expected(header: str) -> str:
         """ 
         Return expected severity for a missing header
         """
         return required_headers.get(header, "info")
 
+    # ===============================================================
+    # FUNCTION : add
+    # ===============================================================
     def add(header: str, status: str, severity: str, issue: str, rec: str, value: str | None):
         """ 
         Append a structured finding entry 
@@ -109,7 +114,7 @@ def scan_security_headers(
                 None,
             )
         else:
-            m = re.search(r"max-age\s*=\s*(\d+)", hsts, re.I)
+            m = re.search(r"max-age\s*=\s*(\d+)", hsts, re.I) 
             max_age = int(m.group(1)) if m else None
             has_include = "includesubdomains" in hsts.lower()
 

@@ -1,7 +1,7 @@
 import httpx
 import requests
 
-from constants import SECURITY_HEADERS
+from constants import HEADER, SECURITY_HEADERS
 from core.http.errors import map_http_scan_error
 from core.http.exposure import scan_exposed_methods, scan_standard_files
 from core.http.headers_security import scan_security_headers
@@ -9,6 +9,7 @@ from core.http.mixed_content import detect_mixed_content, evaluate_mixed_content
 from core.http.report import build_http_report
 from core.http.redirects import scan_redirections
 from core.http.response_analysis import (
+    analyze_url_transition,
     adjust_url_risk_with_https_posture,
     detect_http_version,
     evaluate_https_posture,
@@ -17,15 +18,21 @@ from core.http.response_analysis import (
     evaluate_status,
 )
 from core.http.result import init_http_result
-from core.http.urls import analyze_url_transition
 from utils.url import normalize_url
 
 
+# ===============================================================
+# FUNCTION : scan_http_config
+# ===============================================================
 def scan_http_config(url: str) -> dict:
     """Pipeline HTTP complet: requete, analyse, enrichissement, puis construction du report."""
     normalized_url = normalize_url(url)
     result = init_http_result(normalized_url)
-    request_headers = {"User-Agent": "Mozilla/5.0"}
+    target = result["target"]
+    transport = result["transport"]
+    content = result["content"]
+    exposure = result["exposure"]
+    request_headers = HEADER.copy()
 
     try:
         response = requests.get(
@@ -37,86 +44,86 @@ def scan_http_config(url: str) -> dict:
 
         # Bloc 1: informations de reponse immediates.
         (
-            result["status_code"],
-            result["status_message"],
-            result["status_ok"],
+            transport["status_code"],
+            transport["status_message"],
+            transport["status_ok"],
         ) = evaluate_status(response)
 
-        result["status_risk"] = "INFO"
+        transport["status_risk"] = "INFO"
 
         (
-            result["final_url"],
-            result["url_ok"],
-            result["url_comment"],
-            result["url_findings"],
-            result["url_risk"],
-        ) = analyze_url_transition(result["original_url"], response.url)
+            target["final_url"],
+            target["url_ok"],
+            target["url_comment"],
+            target["url_risk"],
+            target["has_url_credentials"],
+        ) = analyze_url_transition(target["original_url"], response.url)
 
         (
-            result["http_version"],
-            result["http_ok"],
-            result["http_comment"],
-            result["http_version_risk"],
-        ) = detect_http_version(result["final_url"], httpx)
+            transport["http_version"],
+            transport["http_ok"],
+            transport["http_comment"],
+            transport["http_version_risk"],
+        ) = detect_http_version(target["final_url"], httpx)
 
 
         # Bloc 2: posture HTTPS et impact sur l'interpretation de l'URL finale.
         (
-            result["uses_https"],
-            result["https_value"],
-            result["https_comment"],
-            result["https_risk"],
+            transport["uses_https"],
+            transport["https_value"],
+            transport["https_comment"],
+            transport["https_risk"],
         ) = evaluate_https_posture(
-            original_url=result["original_url"],
-            final_url=result["final_url"],
+            original_url=target["original_url"],
+            final_url=target["final_url"],
             response=response,
             requests_module=requests,
             headers=request_headers,
             timeout=5,
         )
 
-        result["url_risk"], result["url_comment"] = adjust_url_risk_with_https_posture(
-            url_risk=result.get("url_risk", "MEDIUM"),
-            final_url=result.get("final_url", ""),
-            https_value=result.get("https_value", "Non"),
-            url_comment=result.get("url_comment", ""),
+        target["url_risk"], target["url_comment"] = adjust_url_risk_with_https_posture(
+            url_risk=target.get("url_risk", "MEDIUM"),
+            final_url=target.get("final_url", ""),
+            https_value=transport.get("https_value", "Non"),
+            url_comment=target.get("url_comment", ""),
         )
 
-        result["time"] = response.elapsed.total_seconds()
-        result["time_ok"], result["time_comment"] = evaluate_response_time(result["time"])
-        result["time_risk"] = evaluate_response_time_risk(result["time"])
+        transport["time"] = response.elapsed.total_seconds()
+        transport["time_ok"], transport["time_comment"] = evaluate_response_time(transport["time"])
+        transport["time_risk"] = evaluate_response_time_risk(transport["time"])
 
         # Bloc 3: analyse des headers et du contenu HTML.
-        result["header_findings"] = scan_security_headers(
+        content["header_findings"] = scan_security_headers(
             response.headers,
             SECURITY_HEADERS,
         )
 
         (
-            result["mixed_content"],
-            result["mixed_url"],
-            result["mixed_comment"],
-            result["mixed_content_level"],
+            content["mixed_content"],
+            content["mixed_url"],
+            content["mixed_comment"],
+            content["mixed_content_level"],
         ) = detect_mixed_content(
             response.text,
-            result["final_url"],
-            result["uses_https"],
+            target["final_url"],
+            transport["uses_https"],
         )
-        result["mixed_content_risk"] = evaluate_mixed_content_risk(
-            result["mixed_content"],
-            result["mixed_content_level"],
+        content["mixed_content_risk"] = evaluate_mixed_content_risk(
+            content["mixed_content"],
+            content["mixed_content_level"],
         )
 
         # Bloc 4: exposition annexe (redirections, fichiers standards, methodes HTTP).
-        result["redirects"] = scan_redirections(response, normalized_url)
-        result["standard_files"] = scan_standard_files(
-            result["final_url"],
+        exposure["redirects"] = scan_redirections(response, normalized_url)
+        exposure["standard_files"] = scan_standard_files(
+            target["final_url"],
             requests_module=requests,
             headers=request_headers,
             timeout=5,
         )
-        result["methods_exposure"] = scan_exposed_methods(
-            result["final_url"],
+        exposure["methods_exposure"] = scan_exposed_methods(
+            target["final_url"],
             requests_module=requests,
             headers=request_headers,
             timeout=5,

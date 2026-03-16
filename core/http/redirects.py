@@ -6,46 +6,36 @@
 import ipaddress
 from urllib.parse import urlparse, urljoin
 
-from utils.http import shorten_url
-import traceback
+from utils.http import is_apex_www_pair, normalize_hostname, shorten_url
 
 
+# ===============================================================
+# FUNCTION : _base_domain
+# ===============================================================
 def _base_domain(hostname: str | None) -> str:
     """
-    Lightweight base-domain extraction (eTLD+1 approximation).
-    Keeps localhost/IP untouched.
+    Extract the base domain from a hostname.
+
+    Returns:
+        str: Base domain.
     """
-    h = (hostname or "").strip().lower().strip(".")
-    if not h:
+    hostname = normalize_hostname(hostname)
+    if not hostname:
         return ""
     try:
-        ipaddress.ip_address(h)
-        return h
+        ipaddress.ip_address(hostname)
+        return hostname
     except ValueError:
         pass
 
-    parts = h.split(".")
+    parts = hostname.split(".")
     if len(parts) >= 2:
         return ".".join(parts[-2:])
-    return h
+    return hostname
 
-
-def _format_redirect_chain_comment(hop: dict) -> str:
-    """Construit un commentaire compact pour la table des redirections."""
-    from_url = str(hop.get("from_url", "") or "")
-    location = str(hop.get("location", "") or "")
-    hop_url = str(hop.get("url", "") or "")
-
-    if from_url and location:
-        resolved_from_location = urljoin(from_url, location)
-        if resolved_from_location == hop_url:
-            return f"{shorten_url(from_url)} -> Redirection: {shorten_url(hop_url)}"
-        return f"{shorten_url(from_url)} -> Redirection: {shorten_url(hop_url)}"
-
-    return f"Reponse finale: {shorten_url(hop_url)}"
 
 # ===============================================================
-# FUNCTION : scan_redirections()
+# FUNCTION : scan_redirections
 # ===============================================================
 def scan_redirections(response, original_url: str) -> dict:
     """
@@ -96,44 +86,42 @@ def scan_redirections(response, original_url: str) -> dict:
                 except ValueError:
                     pass
 
-        # Keep unique order for display clarity
+        # Remove duplicates
         result["redirect_domains"] = list(dict.fromkeys(result["redirect_domains"]))
         result["redirect_ips"] = list(dict.fromkeys(result["redirect_ips"]))
 
         # ---------- PER-DOMAIN RISK CLASSIFICATION ----------
         domain_findings = []
-        for dom in result["redirect_domains"]:
-            dom_base = _base_domain(dom)
-            normalized_initial = (initial_domain or "").lower().strip(".")
-            normalized_dom = (dom or "").lower().strip(".")
-            apex_www_pair = {
-                normalized_initial,
-                normalized_dom,
-            } == {initial_base_domain, f"www.{initial_base_domain}"} and bool(initial_base_domain)
-            if dom in result["redirect_ips"]:
+        normalized_initial = normalize_hostname(initial_domain)
+
+        for domain in result["redirect_domains"]:
+            base_domain = _base_domain(domain)
+            normalized_domain = normalize_hostname(domain)
+
+            if domain in result["redirect_ips"]:
                 risk = "HIGH"
                 comment = "Redirection vers IP brute (pas de nom de domaine)"
-            elif dom_base == initial_base_domain:
-                if normalized_dom == normalized_initial:
+            elif base_domain == initial_base_domain:
+                if normalized_domain == normalized_initial:
                     risk = "INFO"
                     comment = ""
-                elif apex_www_pair:
+                elif is_apex_www_pair(normalized_initial, normalized_domain):
                     risk = "INFO"
                     comment = ""
                 else:
                     risk = "LOW"
-                    comment = "Sous-domaine du meme domaine"
+                    comment = "Sous-domaine du même domaine"
             else:
-                if "xn--" in dom:
+                if "xn--" in domain:
                     risk = "HIGH"
-                    comment = "Domaine externe en punycode (verification manuelle recommandee)"
+                    comment = "Domaine externe en punycode (vérification manuelle recommandée)"
                 else:
                     risk = "LOW"
                     comment = "Redirection vers un domaine externe"
 
             domain_findings.append(
                 {
-                    "domain": dom,
+                    "domain": domain,
                     "risk": risk,
                     "comment": comment,
                 }
@@ -143,7 +131,6 @@ def scan_redirections(response, original_url: str) -> dict:
 
         # ---------------- BUILD REDIRECT CHAIN -----------------
         # Ordered hops (from Location resolution) + final response URL
-        # This enables hop-by-hop downgrade/upgrade detection.
         chain = []
 
         for resp in history:
@@ -155,7 +142,12 @@ def scan_redirections(response, original_url: str) -> dict:
                 "url": str(target),
                 "status": int(getattr(resp, "status_code", 0) or 0),
             }
-            hop["display_comment"] = _format_redirect_chain_comment(hop)
+            if hop["from_url"] and hop["location"]:
+                hop["display_comment"] = (
+                    f"{shorten_url(hop['from_url'])} -> Redirection: {shorten_url(hop['url'])}"
+                )
+            else:
+                hop["display_comment"] = f"Reponse finale: {shorten_url(hop['url'])}"
             chain.append(hop)
 
         # final hop (what requests ended up on)
@@ -165,7 +157,7 @@ def scan_redirections(response, original_url: str) -> dict:
             "url": str(getattr(response, "url", "") or ""),
             "status": int(getattr(response, "status_code", 0) or 0),
         }
-        final_hop["display_comment"] = _format_redirect_chain_comment(final_hop)
+        final_hop["display_comment"] = f"Reponse finale: {shorten_url(final_hop['url'])}"
         chain.append(final_hop)
 
         result["redirect_chain"] = chain
@@ -192,9 +184,6 @@ def scan_redirections(response, original_url: str) -> dict:
             result["ri_comment"] = f"Redirection vers IP brute ({', '.join(result['redirect_ips'])})"
 
     except Exception as e:
-        tb = traceback.format_exc()
-        print(tb)  # dans la console
-        # et/ou dans ta popup :
-        ##print((f"Erreur pendant le scan: {e}\n\n{tb}"))
+        result["error"] = f"Erreur pendant l'analyse des redirections: {e}"
 
     return result

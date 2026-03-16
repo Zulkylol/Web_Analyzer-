@@ -1,19 +1,40 @@
+# core/http/exposure.py
+
+# ===============================================================
+# IMPORTS
+# ===============================================================
 from urllib.parse import urlparse, urlunparse
 
-
+# ===============================================================
+# FUNCTION : _base_origin
+# ===============================================================
 def _base_origin(url: str) -> str:
+    """
+    Remove path, parameters and query from a URL
+
+    Returns : 
+        str : base URL 
+    """
     p = urlparse(url or "")
     if not p.scheme or not p.netloc:
-        return ""
+        return ""  
     return urlunparse((p.scheme, p.netloc, "", "", "", ""))
 
-
+# ===============================================================
+# FUNCTION : scan_standard_files
+# ===============================================================
 def scan_standard_files(
     final_url: str,
     requests_module,
     headers: dict | None = None,
     timeout: int = 5,
 ) -> list[dict[str, str]]:
+    """
+    Check whether standard files (robots.txt and security.txt) are present and accessible.
+    
+    Returns : 
+        list[dict[str, str]] : list of findings
+    """
     findings: list[dict[str, str]] = []
     origin = _base_origin(final_url)
     if not origin:
@@ -34,6 +55,8 @@ def scan_standard_files(
                 allow_redirects=True,
             )
             code = int(getattr(resp, "status_code", 0) or 0)
+
+            #HTTP OK
             if code == 200:
                 findings.append(
                     {
@@ -44,6 +67,8 @@ def scan_standard_files(
                         "url": str(getattr(resp, "url", "") or url),
                     }
                 )
+
+            #HTTP UNAUTHORIZED
             elif code in (401, 403):
                 findings.append(
                     {
@@ -75,16 +100,23 @@ def scan_standard_files(
                     "url": url,
                 }
             )
-
     return findings
 
-
+# ===============================================================
+# FUNCTION : scan_exposed_methods
+# ===============================================================
 def scan_exposed_methods(
     final_url: str,
     requests_module,
     headers: dict | None = None,
     timeout: int = 5,
 ) -> dict:
+    """
+    Detect exposed HTTP methods and classify the associated risk.
+
+    Returns :
+        dict : exposed methods with associated risk
+    """
     result = {
         "value": "Unknown",
         "risk": "INFO",
@@ -102,12 +134,15 @@ def scan_exposed_methods(
             timeout=timeout,
             allow_redirects=True,
         )
+
+        #Retrieve the allowed methods
         allow_raw = (
             resp.headers.get("Allow")
-            or resp.headers.get("allow")
             or resp.headers.get("Access-Control-Allow-Methods")
             or ""
         )
+
+        #Normalization
         methods = sorted(
             {
                 m.strip().upper()
@@ -115,6 +150,7 @@ def scan_exposed_methods(
                 if m and m.strip()
             }
         )
+
         if not methods:
             result["value"] = "Not disclosed"
             result["risk"] = "INFO"

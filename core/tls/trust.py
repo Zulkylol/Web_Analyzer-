@@ -4,35 +4,44 @@
 # IMPORTS
 # ===============================================================
 from __future__ import annotations
+
 from cryptography import x509
+
 from utils.tls import is_chain_trusted_by_mozilla
 
+
 # ===============================================================
-# FUNCTION : analyze_trust()
+# FUNCTION : analyze_trust
 # ===============================================================
-def analyze_trust(result: dict, x509_cert: x509.Certificate, url: str) -> None:
+def analyze_trust(
+    x509_cert: x509.Certificate,
+    url: str,
+    negotiated_version: str = "",
+) -> tuple[dict, str, str]:
     """
     Check certificate trust and self-signed status.
 
-    Updates result with self-signed detection and Mozilla trust validation.
-    May set negotiated TLS version or an error if missing.
-
-    Args:
-        result (dict): Analysis dictionary to update.
-        x509_cert (x509.Certificate): Parsed certificate.
-        url (str): Target URL for trust validation.
+    Returns:
+        tuple[dict, str, str]:
+            - trust block
+            - negotiated TLS version (possibly completed)
+            - error message
     """
-    tls = result["tls"]
-    trust = result["trust"]
-
-    trust["is_self_signed"] = x509_cert.issuer == x509_cert.subject
+    trust = {
+        "is_trusted": False,
+        "is_self_signed": x509_cert.issuer == x509_cert.subject,
+    }
 
     trusted, tls_info = is_chain_trusted_by_mozilla(url)
     trust["is_trusted"] = trusted
 
-    # comportement identique à ton code
-    if tls.get("negotiated_version", "") == "":
+    if negotiated_version == "":
         if trusted:
-            tls["negotiated_version"] = tls_info
+            negotiated_version = tls_info
+            error_message = ""
         else:
-            result["errors"]["message"] = tls_info
+            error_message = tls_info
+    else:
+        error_message = ""
+
+    return trust, negotiated_version, error_message

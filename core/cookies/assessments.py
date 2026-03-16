@@ -3,6 +3,9 @@ from __future__ import annotations
 from core.cookies.policy import SEV_RANK, cookie_sensitivity_flags
 
 
+# ===============================================================
+# FUNCTION : add_finding
+# ===============================================================
 def add_finding(
     findings: list[dict],
     category: str,
@@ -25,6 +28,9 @@ def add_finding(
     )
 
 
+# ===============================================================
+# FUNCTION : select_finding
+# ===============================================================
 def select_finding(findings: list[dict], categories: tuple[str, ...]) -> dict | None:
     """Retourne le finding le plus severe parmi plusieurs categories equivalentes."""
     matches = [finding for finding in findings if str(finding.get("category", "")) in categories]
@@ -33,6 +39,9 @@ def select_finding(findings: list[dict], categories: tuple[str, ...]) -> dict | 
     return max(matches, key=lambda finding: SEV_RANK.get(str(finding.get("severity", "info")).lower(), -1))
 
 
+# ===============================================================
+# FUNCTION : max_severity
+# ===============================================================
 def max_severity(findings: list[dict]) -> str:
     """Retourne la severite maximale d'une liste de findings cookies."""
     if not findings:
@@ -43,6 +52,9 @@ def max_severity(findings: list[dict]) -> str:
     )
 
 
+# ===============================================================
+# FUNCTION : find_scope_collision_names
+# ===============================================================
 def find_scope_collision_names(cookies: list[dict]) -> set[str]:
     """Detecte les noms de cookie reutilises sur plusieurs couples domaine/path."""
     scopes_by_name: dict[str, set[tuple[str, str]]] = {}
@@ -57,6 +69,9 @@ def find_scope_collision_names(cookies: list[dict]) -> set[str]:
     return {name for name, scopes in scopes_by_name.items() if len(scopes) > 1}
 
 
+# ===============================================================
+# FUNCTION : build_scope_collision_findings
+# ===============================================================
 def build_scope_collision_findings(duplicate_names: set[str]) -> list[dict]:
     """Construit les findings globaux de collision de scope."""
     findings: list[dict] = []
@@ -72,6 +87,9 @@ def build_scope_collision_findings(duplicate_names: set[str]) -> list[dict]:
     return findings
 
 
+# ===============================================================
+# FUNCTION : build_cookie_findings
+# ===============================================================
 def build_cookie_findings(cookie: dict) -> list[dict]:
     """Genere les findings metier pour un cookie donne."""
     findings: list[dict] = []
@@ -220,6 +238,9 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
     return findings
 
 
+# ===============================================================
+# FUNCTION : build_cookie_assessments
+# ===============================================================
 def build_cookie_assessments(cookie: dict, findings: list[dict], *, has_scope_collision: bool = False) -> dict:
     """Projette les findings d'un cookie en assessments par attribut pour le report detaille."""
     samesite = (cookie.get("samesite") or "").strip().lower()

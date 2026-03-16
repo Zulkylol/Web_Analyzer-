@@ -1,3 +1,6 @@
+# ===============================================================
+# FUNCTION : init_cookies_result
+# ===============================================================
 def init_cookies_result() -> dict:
     """Initialise la structure commune utilisee par le scan cookies."""
     return {

@@ -6,7 +6,7 @@
 import ttkbootstrap as ttk
 
 # ===============================================================
-# FUNCTION : clear_tables()
+# FUNCTION : clear_tables
 # ===============================================================
 def clear_tables(http_table,ssl_table,cookies_table):
     """
@@ -20,7 +20,7 @@ def clear_tables(http_table,ssl_table,cookies_table):
         cookies_table.delete(item)
 
 # ===============================================================
-# FUNCTION : create_result_table()
+# FUNCTION : create_result_table
 # ===============================================================
 def create_result_table(parent, title):
     """
