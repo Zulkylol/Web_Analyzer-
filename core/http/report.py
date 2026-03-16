@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from constants import STATUS_ICON
 from core.reporting import build_report, icon_for_risk, make_row, make_section_row
@@ -245,7 +245,7 @@ def build_http_report(result: dict) -> dict:
                 include=severity != "INFO",
             )
             if finding.get("recommendation"):
-                add_row("", "", comment="➩ Recommandation: "+finding["recommendation"], check="", tags=("recommendation",))
+                add_row("", "", comment="âž© Recommandation: "+finding["recommendation"], check="", tags=("recommendation",))
 
     # Section 4: surface d'exposition annexe autour de la cible HTTP.
     add_section("Exposition")

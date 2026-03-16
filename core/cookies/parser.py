@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from http.cookies import SimpleCookie
 from urllib.parse import urlparse

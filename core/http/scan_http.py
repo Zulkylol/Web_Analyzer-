@@ -1,4 +1,4 @@
-import httpx
+﻿import httpx
 import requests
 
 from constants import HEADER, SECURITY_HEADERS

@@ -19,9 +19,6 @@ from utils.url import normalize_url
 
 
 # ===============================================================
-# FUNCTION : is_chain_trusted_by_mozilla()
-# ===============================================================    
-# ===============================================================
 # FUNCTION : is_chain_trusted_by_mozilla
 # ===============================================================
 def is_chain_trusted_by_mozilla(url: str, timeout=5) -> tuple[bool, str]:
@@ -51,9 +48,6 @@ def is_chain_trusted_by_mozilla(url: str, timeout=5) -> tuple[bool, str]:
     
 
 # ===============================================================
-# FUNCTION : server_supports_tls_version()
-# ===============================================================   
-# ===============================================================
 # FUNCTION : server_supports_tls_version
 # ===============================================================
 def server_supports_tls_version(url: str, tls_version: ssl.TLSVersion, timeout=5) -> bool:
@@ -81,9 +75,6 @@ def server_supports_tls_version(url: str, tls_version: ssl.TLSVersion, timeout=5
         return False
     
 
-# ===============================================================
-# FUNCTION : server_accepts_cipher()
-# ===============================================================  
 # ===============================================================
 # FUNCTION : server_accepts_cipher
 # ===============================================================

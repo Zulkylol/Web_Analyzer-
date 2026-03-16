@@ -1,11 +1,14 @@
+import os
 import threading
 import time
 
 import ttkbootstrap as ttk
-from tkinter import messagebox
+from tkinter import filedialog, messagebox
 
 from core.cookies.scan_cookies import scan_cookies_config
 from core.http.scan_http import scan_http_config
+from core.pdf.export_report import export_pdf_report
+from core.reporting import make_section_row
 from core.tls.scan_tls import scan_tls_config
 from ui.app_window import build_main_window
 from ui.display_common import display_report_rows
@@ -292,8 +295,41 @@ class WebAnalyzerApp:
     # FUNCTION : open_report
     # ===============================================================
     def open_report(self) -> None:
-        """Placeholder pour une future fonctionnalite d'export/ouverture de rapport."""
-        messagebox.showinfo("Report")
+        """Genere un PDF a partir des reports courants puis l'ouvre."""
+        has_report = any(((result or {}).get("report") or {}).get("rows") for result in self.scan_results.values())
+        if not has_report:
+            messagebox.showwarning("PDF", "Aucun resultat de scan a exporter")
+            return
+
+        default_name = f"web_analyzer_report_{time.strftime('%Y%m%d_%H%M%S')}.pdf"
+        filepath = filedialog.asksaveasfilename(
+            parent=self.root,
+            title="Exporter le rapport PDF",
+            defaultextension=".pdf",
+            initialfile=default_name,
+            filetypes=[("PDF", "*.pdf")],
+        )
+        if not filepath:
+            return
+
+        try:
+            export_pdf_report(self.scan_results, filepath)
+        except ModuleNotFoundError as exc:
+            if exc.name == "reportlab":
+                messagebox.showerror(
+                    "PDF",
+                    "La dependance reportlab n'est pas installee\n\nInstalle les dependances du projet avant d'exporter le PDF",
+                )
+                return
+            raise
+        except Exception as exc:
+            messagebox.showerror("PDF", f"Erreur pendant la generation du PDF : {exc}")
+            return
+
+        try:
+            os.startfile(filepath)  # type: ignore[attr-defined]
+        except Exception:
+            messagebox.showinfo("PDF", f"Rapport PDF genere :\n{filepath}")
 
     # ===============================================================
     # FUNCTION : sync_http_options
@@ -320,19 +356,28 @@ class WebAnalyzerApp:
         """Consolide les findings des trois modules dans la table globale."""
         self.clear_tree(self.summary_table)
         summary_rows = []
+        section_titles = {
+            "HTTP": "HTTP",
+            "SSL/TLS": "TLS",
+            "Cookies": "Cookies",
+        }
         for source_name, result in self.scan_results.items():
             report = (result or {}).get("report", {})
+            source_rows = []
             for finding in report.get("findings", []):
                 risk = str(finding.get("risk", "")).upper()
                 if not self.is_summary_risk(risk):
                     continue
-                summary_rows.append(
+                source_rows.append(
                     {
                         **finding,
-                        "param": f"[{source_name}] {finding.get('param', '')}",
+                        "param": finding.get("param", ""),
                         "tags": [],
                     }
                 )
+            if source_rows:
+                summary_rows.append(make_section_row(section_titles.get(source_name, source_name)))
+                summary_rows.extend(source_rows)
 
         display_report_rows({"rows": summary_rows}, self.summary_table)
 

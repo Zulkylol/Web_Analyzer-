@@ -1,4 +1,4 @@
-# core/http/errors.py
+﻿# core/http/errors.py
 
 # ===============================================================
 # IMPORTS

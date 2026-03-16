@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from core.cookies.policy import SEV_RANK, cookie_sensitivity_flags
 

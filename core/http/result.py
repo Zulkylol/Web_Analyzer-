@@ -1,4 +1,4 @@
-# core/http/result.py
+﻿# core/http/result.py
 
 # ===============================================================
 # FUNCTION : init_http_result

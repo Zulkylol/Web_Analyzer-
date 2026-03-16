@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from core.tls.cert_extensions import analyze_extensions
 from core.tls.cert_identity import analyze_identity

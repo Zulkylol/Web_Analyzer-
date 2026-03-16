@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from constants import STATUS_ICON
 from core.reporting import build_report, make_row, make_section_row
@@ -90,7 +90,7 @@ def build_cookies_report(result: dict) -> dict:
                 include=severity != "INFO",
             )
             if finding.get("recommendation"):
-                add_row("", "", comment="➩ Recommandation: "+finding["recommendation"], check="", tags=("recommendation",))
+                add_row("", "", comment="âž© Recommandation: "+finding["recommendation"], check="", tags=("recommendation",))
     else:
         add_row("Findings cookies", "-", risk="INFO", comment="Aucun probleme de configuration cookie detecte", check=STATUS_ICON["ok"])
 
