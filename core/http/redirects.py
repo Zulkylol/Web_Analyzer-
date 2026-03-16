@@ -119,7 +119,7 @@ def scan_redirections(response, original_url: str) -> dict:
                     f"{shorten_url(hop['from_url'])} -> Redirection: {shorten_url(hop['url'])}"
                 )
             else:
-                hop["display_comment"] = f"Reponse finale: {shorten_url(hop['url'])}"
+                hop["display_comment"] = f"Réponse finale: {shorten_url(hop['url'])}"
             chain.append(hop)
 
         # final hop (what requests ended up on)
@@ -129,7 +129,7 @@ def scan_redirections(response, original_url: str) -> dict:
             "url": str(getattr(response, "url", "") or ""),
             "status": int(getattr(response, "status_code", 0) or 0),
         }
-        final_hop["display_comment"] = f"Reponse finale: {shorten_url(final_hop['url'])}"
+        final_hop["display_comment"] = f"Réponse finale: {shorten_url(final_hop['url'])}"
         chain.append(final_hop)
 
         result["redirect_chain"] = chain
@@ -141,11 +141,11 @@ def scan_redirections(response, original_url: str) -> dict:
             result["num_ok"] = False
         elif len(history) > 5:
             result["num_risk"] = "MEDIUM"
-            result["num_comment"] = "Nombre de redirections eleve"
+            result["num_comment"] = "Nombre de redirections élevé"
             result["num_ok"] = None
         elif len(history) > 3:
             result["num_risk"] = "LOW"
-            result["num_comment"] = "Quelques redirections detectees"
+            result["num_comment"] = "Quelques redirections détectées"
             result["num_ok"] = None
         else:
             result["num_risk"] = "INFO"

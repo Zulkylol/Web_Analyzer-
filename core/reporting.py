@@ -159,7 +159,7 @@ def build_report(source: str, rows: list[dict], *, error_message: str = "") -> d
     Returns :
         dict : formatted report
     """
-    public_rows = [_public_row(row) for row in rows]
+    public_rows = [_public_row(row) for row in rows if "hidden_in_table" not in row.get("tags", [])]
     findings = [_public_row(row) for row in rows if row.get("include_in_findings")]
     # Les compteurs de synthese globale se basent uniquement sur les findings.
     high_findings = sum(1 for finding in findings if normalize_risk(finding.get("risk", "INFO")) in {"HIGH", "CRITICAL"})

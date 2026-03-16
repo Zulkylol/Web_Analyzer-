@@ -44,28 +44,26 @@ def build_cookies_report(result: dict) -> dict:
         return build_report("Cookies", rows, error_message=error_message)
 
     # Section 1: vue d'ensemble des cookies observes sur la reponse finale.
-    add_section("Synthese")
+    add_section("Synthèse")
     add_row("URL finale", result.get("final_url", ""), comment=summary.get("comment", ""))
     cookie_count_risk = str(summary.get("cookie_count_risk", "INFO")).upper()
     add_row(
         "Nombre de cookies",
         str(total_cookies),
         risk=cookie_count_risk,
-        comment=f"Cookies sensibles detectes: {sensitive_cookies}",
+        comment=f"Cookies sensibles détectés: {sensitive_cookies}",
         include=cookie_count_risk != "INFO",
     )
     add_row("Nombre d'alertes", str(summary.get("total_findings", 0)))
 
     max_severity = str(summary.get("max_severity", "info")).upper()
     add_row(
-        "Severite max",
+        "Sévérité max",
         max_severity,
         risk=max_severity,
-        comment="Niveau de risque le plus eleve detecte",
+        comment="Niveau de risque le plus élevé détecté",
     )
 
-    # Section 2: findings consolides, tries par severite.
-    add_section("Alertes")
     if findings:
         for index, finding in enumerate(findings, start=1):
             severity = str(finding.get("severity", "INFO")).upper()
@@ -74,21 +72,18 @@ def build_cookies_report(result: dict) -> dict:
                 finding.get("cookie", "-"),
                 risk=severity,
                 comment=str(finding.get("issue", "")),
+                tags=("hidden_in_table",),
                 include=severity != "INFO",
             )
-            if finding.get("recommendation"):
-                add_row("", "", comment="âž© Recommandation: "+finding["recommendation"], check="", tags=("recommendation",))
-    else:
-        add_row("Findings cookies", "-", risk="INFO", comment="Aucun probleme de configuration cookie detecte", check=STATUS_ICON["ok"])
 
     if cookies:
-        # Section 3: detail attribut par attribut pour chaque cookie recu.
-        add_section("Details des cookies")
+        # Section 2: detail attribut par attribut pour chaque cookie recu.
+        add_section("Détails des cookies")
         for index, cookie in enumerate(cookies, start=1):
             assessments = cookie.get("assessments") or {}
             samesite = (cookie.get("samesite") or "").strip().lower()
-            samesite_text = samesite.capitalize() if samesite else "non defini"
-            domain_text = cookie.get("domain") or "hote courant"
+            samesite_text = samesite.capitalize() if samesite else "non défini"
+            domain_text = cookie.get("domain") or "hôte courant"
             path_text = cookie.get("path") or "/"
             persistence_text = "persistant" if bool(cookie.get("persistent")) else "session"
             size_text = cookie.get("size", 0)

@@ -1,8 +1,3 @@
-# core/tls/cert_validity.py
-
-# ===============================================================
-# IMPORTS
-# ===============================================================
 from __future__ import annotations
 
 from datetime import datetime, timezone

@@ -44,7 +44,7 @@ def build_tls_report(result: dict) -> dict:
 
     # -------------- IDENTITE DU CERTIFICAT ------------------
     # Section 1: certificate identity presented by the server.
-    add_section("Identite du certificat")
+    add_section("Identité du certificat")
     add_row(
         "Nom",
         identity.get("common_name", ""),
@@ -86,7 +86,7 @@ def build_tls_report(result: dict) -> dict:
     # Section 2: chain trust and self-signed status.
     add_section("Confiance")
     add_row(
-        "Autorite certifiante",
+        "Autorité certifiante",
         trust.get("authority_name", ""),
         risk=str(trust.get("authority_risk", "INFO")).upper(),
         comment=trust.get("authority_comment", ""),
@@ -94,7 +94,7 @@ def build_tls_report(result: dict) -> dict:
         include=str(trust.get("authority_risk", "INFO")).upper() != "INFO",
     )
     add_row(
-        "Auto-signe",
+        "Auto-signé",
         trust.get("is_self_signed"),
         risk=str(trust.get("self_signed_risk", "INFO")).upper(),
         comment=trust.get("self_signed_comment", ""),
@@ -104,10 +104,10 @@ def build_tls_report(result: dict) -> dict:
 
     # -------------------- METADONNES ------------------------
     # Section 3: general certificate metadata.
-    add_section("Metadonnees du certificat")
+    add_section("Métadonnées du certificat")
     valid_from = certificate.get("valid_from", {}) or {}
     add_row(
-        "Debut de validite",
+        "Début de validité",
         valid_from.get("value", ""),
         risk=str(valid_from.get("risk", "INFO")).upper(),
         comment=valid_from.get("comment", ""),
@@ -117,7 +117,7 @@ def build_tls_report(result: dict) -> dict:
 
     valid_to = certificate.get("valid_to", {}) or {}
     add_row(
-        "Fin de validite",
+        "Fin de validité",
         valid_to.get("value", ""),
         risk=str(valid_to.get("risk", "INFO")).upper(),
         comment=valid_to.get("comment", ""),
@@ -137,7 +137,7 @@ def build_tls_report(result: dict) -> dict:
 
     serial = certificate.get("serial", {}) or {}
     add_row(
-        "Numero de serie",
+        "Numéro de série",
         serial.get("value", ""),
         risk=str(serial.get("risk", "INFO")).upper(),
         comment=serial.get("comment", ""),
@@ -164,7 +164,7 @@ def build_tls_report(result: dict) -> dict:
 
     public_key = certificate.get("public_key", {}) or {}
     add_row(
-        "Cle publique",
+        "Clé publique",
         public_key.get("value", ""),
         risk=str(public_key.get("risk", "INFO")).upper(),
         comment=public_key.get("comment", ""),
@@ -209,7 +209,7 @@ def build_tls_report(result: dict) -> dict:
 
     crl_distribution_points = extensions.get("crl_distribution_points", {}) or {}
     add_row(
-        "Liste de revocation",
+        "Liste de révocation",
         crl_distribution_points.get("value", ""),
         risk=str(crl_distribution_points.get("risk", "INFO")).upper(),
         comment=crl_distribution_points.get("comment", ""),
@@ -264,7 +264,7 @@ def build_tls_report(result: dict) -> dict:
         include=str(cipher.get("risk", "INFO")).upper() != "INFO",
     )
     add_row(
-        "Taille de cle (bits)",
+        "Taille de clé (bits)",
         cipher.get("bits", 0),
         risk=str(cipher.get("bits_risk", "INFO")).upper(),
         comment="Taille de clé de la suite cryptographique négociée par le serveur",

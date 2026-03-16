@@ -21,7 +21,7 @@ def add_finding(
     recommendation: str,
     status: str = "warning",
 ) -> None:
-    """Ajoute un finding normalise a la liste des alertes cookies."""
+    """Ajoute un finding normalisé à la liste des alertes cookies."""
     findings.append(
         {
             "category": category,
@@ -38,7 +38,7 @@ def add_finding(
 # FUNCTION : select_finding
 # ===============================================================
 def select_finding(findings: list[dict], categories: tuple[str, ...]) -> dict | None:
-    """Retourne le finding le plus severe parmi plusieurs categories equivalentes."""
+    """Retourne le finding le plus sévère parmi plusieurs catégories équivalentes."""
     matches = [finding for finding in findings if str(finding.get("category", "")) in categories]
     if not matches:
         return None
@@ -49,7 +49,7 @@ def select_finding(findings: list[dict], categories: tuple[str, ...]) -> dict | 
 # FUNCTION : find_scope_collision_names
 # ===============================================================
 def find_scope_collision_names(cookies: list[dict]) -> set[str]:
-    """Detecte les noms de cookie reutilises sur plusieurs couples domaine/path."""
+    """Détecte les noms de cookie réutilisés sur plusieurs couples domaine/path."""
     scopes_by_name: dict[str, set[tuple[str, str]]] = {}
     for cookie in cookies:
         name = str(cookie.get("name", ""))
@@ -74,8 +74,8 @@ def build_scope_collision_findings(duplicate_names: set[str]) -> list[dict]:
             "scope",
             "low",
             name,
-            "Meme nom de cookie utilise sur plusieurs scopes domain/path",
-            "Uniformiser les scopes ou renommer les cookies pour eviter les collisions",
+            "Même nom de cookie utilisé sur plusieurs scopes domain/path",
+            "Uniformiser les scopes ou renommer les cookies pour éviter les collisions",
         )
     return findings
 
@@ -84,9 +84,10 @@ def build_scope_collision_findings(duplicate_names: set[str]) -> list[dict]:
 # FUNCTION : build_cookie_findings
 # ===============================================================
 def build_cookie_findings(cookie: dict) -> list[dict]:
-    """Genere les findings metier pour un cookie donne."""
+    """Génère les findings métier pour un cookie donné."""
     findings: list[dict] = []
     name = str(cookie.get("name", ""))
+    name_lower = name.lower()
     highly_sensitive, _maybe_sensitive, sensitive = cookie_sensitivity_flags(name)
     secure = bool(cookie.get("secure"))
     httponly = bool(cookie.get("httponly"))
@@ -99,6 +100,7 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
     source_scheme = (cookie.get("source_scheme") or "").lower()
     source_host = (cookie.get("source_host") or "").lower()
     is_https_cookie = source_scheme == "https"
+    is_csrf_cookie = "csrf" in name_lower or "xsrf" in name_lower
 
     # Les checks ci-dessous transforment chaque attribut en risque metier lisible.
     if not secure and is_https_cookie:
@@ -107,19 +109,27 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
             "secure",
             "high" if highly_sensitive else "low",
             name,
-            "Le cookie est servi en HTTPS sans attribut Secure",
+            "Le cookie est servi en HTTPS sans attribut Secure (peut être envoyé sur une requête non chiffrée)",
             "Ajouter Secure pour forcer l'envoi du cookie uniquement en HTTPS",
             status="missing",
         )
 
     if not httponly and sensitive:
+        severity = "high" if highly_sensitive else "info" if is_csrf_cookie else "low"
+        issue = (
+            "Cookie de session/authentification sans HttpOnly (lecture possible via JavaScript en cas de XSS)"
+            if highly_sensitive
+            else "Cookie CSRF/XSRF sans HttpOnly (souvent lisible côté client)"
+            if is_csrf_cookie
+            else "Cookie potentiellement sensible sans HttpOnly (lecture possible via JavaScript)"
+        )
         add_finding(
             findings,
             "httponly",
-            "high" if highly_sensitive else "medium",
+            severity,
             name,
-            "Cookie de session/authentification sans HttpOnly",
-            "Ajouter HttpOnly pour limiter l'acces via JavaScript (XSS)",
+            issue,
+            "Ajouter HttpOnly pour limiter l'accès via JavaScript (XSS)",
             status="missing",
         )
 
@@ -127,10 +137,10 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
         add_finding(
             findings,
             "samesite",
-            "medium" if sensitive else "low",
+            "medium" if highly_sensitive else "low",
             name,
-            "Attribut SameSite absent",
-            "Definir SameSite=Lax (ou Strict selon le besoin fonctionnel)",
+            "Attribut SameSite absent (plus exposé aux requêtes cross-site)",
+            "Définir SameSite=Lax (ou Strict selon le besoin fonctionnel)",
             status="missing",
         )
 
@@ -140,7 +150,7 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
             "samesite_secure",
             "high",
             name,
-            "SameSite=None sans Secure",
+            "SameSite=None sans Secure (configuration refusée ou dégradée par les navigateurs modernes)",
             "Avec SameSite=None, Secure est requis par les navigateurs modernes",
             status="invalid",
         )
@@ -151,7 +161,7 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
             "samesite",
             "low",
             name,
-            f"Valeur SameSite non reconnue: {samesite}",
+            f"Valeur SameSite non reconnue: {samesite} (interprétation navigateur potentiellement incohérente)",
             "Utiliser Strict, Lax ou None",
             status="invalid",
         )
@@ -162,8 +172,8 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
             "type",
             "low",
             name,
-            "Cookie sensible persistant (non-session)",
-            "Preferer un cookie de session si possible pour les identifiants sensibles",
+            "Cookie sensible persistant (non-session) (reste stocké au-delà de la session)",
+            "Préférer un cookie de session si possible pour les identifiants sensibles",
         )
 
     if highly_sensitive and isinstance(max_age, int) and max_age > 60 * 60 * 24 * 30:
@@ -172,8 +182,8 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
             "type",
             "medium",
             name,
-            f"Duree de vie longue pour un cookie sensible ({max_age}s)",
-            "Reduire Max-Age au strict necessaire",
+            f"Durée de vie longue pour un cookie sensible ({max_age}s) (fenêtre d'exposition plus large)",
+            "Réduire Max-Age au strict nécessaire",
         )
 
     if domain and source_host and domain.startswith(".") and not source_host.endswith(domain.lstrip(".").lower()):
@@ -182,8 +192,8 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
             "domain",
             "low",
             name,
-            f"Portee domaine large ({domain})",
-            "Si possible, restreindre Domain a l'hote le plus specifique",
+            f"Portée domaine large ({domain}) (surface d'envoi étendue aux sous-domaines)",
+            "Si possible, restreindre Domain à l'hôte le plus spécifique",
         )
 
     if highly_sensitive and path == "/":
@@ -192,8 +202,8 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
             "path",
             "low",
             name,
-            "Sensitive cookie path is root (/)",
-            "Restrict Path where possible",
+            "Cookie sensible avec Path=/ (portée applicative très large)",
+            "Restreindre Path si possible",
         )
 
     if size > 4096:
@@ -202,8 +212,8 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
             "size",
             "medium",
             name,
-            f"Taille de cookie elevee ({size} octets, > 4096)",
-            "Reduire la taille pour eviter troncature/rejet par navigateur ou proxy",
+            f"Taille de cookie élevée ({size} octets, > 4096) (risque de rejet ou de troncature)",
+            "Réduire la taille pour éviter troncature/rejet par navigateur ou proxy",
         )
 
     if name.startswith("__Host-") and (not secure or domain or path != "/"):
@@ -212,7 +222,7 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
             "secure",
             "high",
             name,
-            "Le prefixe __Host- est invalide (regles non respectees)",
+            "Le préfixe __Host- est invalide (règles non respectées, garanties de portée perdues)",
             "__Host- exige Secure, Path=/ et aucun attribut Domain",
             status="invalid",
         )
@@ -223,8 +233,8 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
             "secure",
             "high",
             name,
-            "Le prefixe __Secure- est utilise sans Secure",
-            "Ajouter Secure pour respecter les exigences du prefixe __Secure-",
+            "Le préfixe __Secure- est utilisé sans Secure (préfixe trompeur et protection non assurée)",
+            "Ajouter Secure pour respecter les exigences du préfixe __Secure-",
             status="invalid",
         )
 
@@ -235,7 +245,7 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
 # FUNCTION : build_cookie_assessments
 # ===============================================================
 def build_cookie_assessments(cookie: dict, findings: list[dict], *, has_scope_collision: bool = False) -> dict:
-    """Projette les findings d'un cookie en assessments par attribut pour le report detaille."""
+    """Projette les findings d'un cookie en assessments par attribut pour le report détaillé."""
     samesite = (cookie.get("samesite") or "").strip().lower()
     domain = (cookie.get("domain") or "").strip()
     path = (cookie.get("path") or "/").strip() or "/"
@@ -261,7 +271,7 @@ def build_cookie_assessments(cookie: dict, findings: list[dict], *, has_scope_co
         },
         "secure": {
             "risk": str(secure_finding.get("severity", "info")).upper() if secure_finding else "INFO",
-            "comment": secure_finding.get("issue", "") if secure_finding else "Attribut Secure present" if cookie.get("secure") else "Attribut Secure absent",
+            "comment": secure_finding.get("issue", "") if secure_finding else "Attribut Secure présent (envoi limité aux requêtes HTTPS)" if cookie.get("secure") else "Attribut Secure absent",
         },
         "httponly": {
             "risk": (
@@ -274,35 +284,35 @@ def build_cookie_assessments(cookie: dict, findings: list[dict], *, has_scope_co
             "comment": (
                 httponly_finding.get("issue", "")
                 if httponly_finding
-                else "Attribut HttpOnly present"
+                else "Attribut HttpOnly présent (non lisible via JavaScript)"
                 if cookie.get("httponly")
-                else "Attribut HttpOnly absent (non sensible)"
+                else "Attribut HttpOnly absent (cookie non sensible)"
                 if not sensitive
                 else "Attribut HttpOnly absent"
             ),
         },
         "samesite": {
             "risk": str(samesite_finding.get("severity", "info")).upper() if samesite_finding else "INFO",
-            "comment": samesite_finding.get("issue", "") if samesite_finding else f"SameSite defini sur {samesite}" if samesite else "SameSite non defini",
+            "comment": samesite_finding.get("issue", "") if samesite_finding else f"SameSite défini sur {samesite} (contrôle des envois cross-site)" if samesite else "SameSite non défini",
         },
         "domain": {
             "risk": str(domain_finding.get("severity", "info")).upper() if domain_finding else "INFO",
-            "comment": domain_finding.get("issue", "") if domain_finding else "Cookie limite a l'hote courant" if not domain else "Attribut Domain explicite",
+            "comment": domain_finding.get("issue", "") if domain_finding else "Cookie limité à l'hôte courant (portée plus restreinte)" if not domain else "Attribut Domain explicite",
         },
         "path": {
             "risk": str(path_finding.get("severity", "info")).upper() if path_finding else "INFO",
-            "comment": path_finding.get("issue", "") if path_finding else f"Path configure sur {path}",
+            "comment": path_finding.get("issue", "") if path_finding else f"Path configuré sur {path} (périmètre d'envoi du cookie)",
         },
         "type": {
             "risk": str(type_finding.get("severity", "info")).upper() if type_finding else "INFO",
-            "comment": type_finding.get("issue", "") if type_finding else "Cookie persistant" if persistent else "Cookie de session",
+            "comment": type_finding.get("issue", "") if type_finding else "Cookie persistant (reste stocké après fermeture du navigateur)" if persistent else "Cookie de session (supprimé à la fermeture du navigateur)",
         },
         "size": {
             "risk": str(size_finding.get("severity", "info")).upper() if size_finding else "INFO",
-            "comment": size_finding.get("issue", "") if size_finding else f"Taille observee: {size} octets",
+            "comment": size_finding.get("issue", "") if size_finding else f"Taille observée: {size} octets (impact potentiel sur compatibilité/performance)",
         },
         "source": {
             "risk": "INFO",
-            "comment": "URL source de l'en-tete Set-Cookie",
+            "comment": "URL source de l'en-tête Set-Cookie",
         },
     }

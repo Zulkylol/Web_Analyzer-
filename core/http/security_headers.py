@@ -183,7 +183,7 @@ def scan_security_headers(
                 add(
                     "Content-Security-Policy",
                     "weak",
-                    _lower_sev(expected("Content-Security-Policy")),
+                    _lower_sev(_lower_sev(expected("Content-Security-Policy"))),
                     "CSP contient unsafe-inline et/ou unsafe-eval (affaiblit la protection contre l'injection de code)",
                     "Durcir la CSP en interdisant les scripts inline et l'évaluation dynamique ('unsafe-inline', 'unsafe-eval')",
                     active_value,

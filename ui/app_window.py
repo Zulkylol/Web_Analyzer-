@@ -23,34 +23,33 @@ def build_main_window(start_scan, open_settings, open_report, on_table_select, s
     """
     root = ttk.Window(themename="cosmo")
     root.title("Web Analyzer")
-    root.geometry("1580x1100")
+    root.geometry("1280x920")
     root.iconbitmap("resources/title_bar.ico")
 
     title_label = ttk.Label(
         root,
         text="Scanner de configuration de s\u00e9curit\u00e9 Web",
-        font=("Helvetica", 16, "bold"),
+        font=("Helvetica", 14, "bold"),
     )
-    title_label.pack(pady=10)
+    title_label.pack(pady=4)
 
     # URL input area for the target to analyze.
     url_frame = ttk.Frame(root)
-    url_frame.pack(pady=5)
-    ttk.Label(url_frame, text="URL du site:", font=("Helvetica", 12)).pack(side="left", padx=5)
+    url_frame.pack(pady=2)
+    ttk.Label(url_frame, text="URL du site:", font=("Helvetica", 10)).pack(side="left", padx=4)
     url_entry = ttk.Entry(url_frame, width=35)
-    url_entry.pack(side="left", padx=5)
+    url_entry.pack(side="left", padx=4)
 
     controls_row = ttk.Frame(root)
-    controls_row.pack(padx=10, pady=10, fill="x")
+    controls_row.pack(padx=10, pady=4, fill="x")
 
     # Scan options block.
     checkbox_frame = ttk.LabelFrame(
         controls_row,
         text="S\u00e9lection des v\u00e9rifications",
-        font=("Helvetica", 11, "bold"),
+        font=("Helvetica", 10, "bold"),
     )
     checkbox_frame.pack(side="left", fill="both", expand=False, padx=(0, 8))
-    checkbox_frame.configure(width=760)
     checkbox_frame.pack_propagate(False)
 
     scan_http_var = ttk.IntVar(value=1)
@@ -58,49 +57,72 @@ def build_main_window(start_scan, open_settings, open_report, on_table_select, s
     scan_tls_var = ttk.IntVar(value=1)
     scan_cookies_var = ttk.IntVar(value=1)
 
+    checkbox_container = ttk.Frame(checkbox_frame)
+    checkbox_container.pack(fill="both", expand=True)
+
+    checkbox_grid = ttk.Frame(checkbox_container)
+    checkbox_grid.place(relx=0.0, rely=0.5, anchor="w", x=12)
+    checkbox_grid.columnconfigure(0, weight=1)
+    checkbox_grid.columnconfigure(1, weight=1)
+
     ttk.Checkbutton(
-        checkbox_frame,
+        checkbox_grid,
         text="Analyser la r\u00e9ponse HTTP",
         variable=scan_http_var,
         command=sync_http_options,
-    ).pack(anchor="w", pady=2, padx=5)
-    force_https_check = ttk.Checkbutton(checkbox_frame, text="Forcer HTTPS", variable=force_https_var)
-    force_https_check.pack(anchor="w", pady=2, padx=5)
-    ttk.Checkbutton(checkbox_frame, text="Analyser TLS et les certificats", variable=scan_tls_var).pack(anchor="w", pady=2, padx=5)
-    ttk.Checkbutton(checkbox_frame, text="Analyser les cookies", variable=scan_cookies_var).pack(anchor="w", pady=2, padx=5)
+    ).grid(row=0, column=0, sticky="w", padx=4, pady=2)
+    force_https_check = ttk.Checkbutton(checkbox_grid, text="Forcer HTTPS", variable=force_https_var)
+    force_https_check.grid(row=0, column=1, sticky="w", padx=4, pady=2)
+    ttk.Checkbutton(
+        checkbox_grid,
+        text="Analyser TLS et les certificats",
+        variable=scan_tls_var,
+    ).grid(row=1, column=0, sticky="w", padx=4, pady=2)
+    ttk.Checkbutton(
+        checkbox_grid,
+        text="Analyser les cookies",
+        variable=scan_cookies_var,
+    ).grid(row=1, column=1, sticky="w", padx=4, pady=2)
+
+    checkbox_grid.update_idletasks()
+    checkbox_frame.configure(width=checkbox_grid.winfo_reqwidth() + 24)
 
     # Actions and progress block.
-    actions_frame = ttk.LabelFrame(controls_row, text="Actions", font=("Helvetica", 11, "bold"))
+    actions_frame = ttk.LabelFrame(controls_row, text="Actions", font=("Helvetica", 10, "bold"))
     actions_frame.pack(side="left", fill="both", expand=True, padx=(8, 0))
 
-    button_frame = ttk.Frame(actions_frame)
-    button_frame.pack(anchor="n", pady=(12, 8))
-    go_button = ttk.Button(button_frame, text="GO", bootstyle=SUCCESS, width=12, command=start_scan)
-    go_button.pack(side="left", padx=10)
-    settings_button = ttk.Button(button_frame, text="Settings", bootstyle=INFO, width=12, command=open_settings)
-    settings_button.pack(side="left", padx=10)
+    actions_content = ttk.Frame(actions_frame)
+    actions_content.pack(fill="both", expand=True, padx=10, pady=4)
+    actions_content.columnconfigure(0, weight=0)
+    actions_content.columnconfigure(1, weight=1)
 
-    progress_bar = ttk.Progressbar(
-        actions_frame,
-        orient="horizontal",
-        length=420,
-        mode="determinate",
-        bootstyle="warning-striped",
-    )
-    progress_bar.pack(anchor="n", pady=(6, 10), padx=12)
+    button_frame = ttk.Frame(actions_content)
+    button_frame.grid(row=0, column=0, rowspan=2, sticky="nw", padx=(0, 14))
+    go_button = ttk.Button(button_frame, text="Analyser", bootstyle=SUCCESS, width=9, command=start_scan)
+    go_button.pack(anchor="w", pady=(0, 6))
+    settings_button = ttk.Button(button_frame, text="Paramètres", bootstyle=INFO, width=9, command=open_settings)
+    settings_button.pack(anchor="w")
 
     open_report_button = ttk.Button(
-        actions_frame,
-        text="Open Report",
+        actions_content,
+        text="Ouvrir en PDF",
         bootstyle=WARNING,
-        width=25,
+        width=18,
         state="disabled",
         command=open_report,
     )
-    open_report_button.pack(anchor="n", pady=(2, 12))
+    open_report_button.grid(row=0, column=1, pady=(1, 4))
+
+    progress_bar = ttk.Progressbar(
+        actions_content,
+        orient="horizontal",
+        mode="determinate",
+        bootstyle="warning-striped",
+    )
+    progress_bar.grid(row=1, column=1, sticky="ew", pady=(2, 4), ipady=6)
 
     tables_frame = ttk.Frame(root)
-    tables_frame.pack(padx=10, pady=10, fill="both", expand=True)
+    tables_frame.pack(padx=10, pady=(4, 10), fill="both", expand=True)
 
     # Results are organized by tab to keep the UI easy to read.
     results_notebook = ttk.Notebook(tables_frame)
@@ -121,21 +143,21 @@ def build_main_window(start_scan, open_settings, open_report, on_table_select, s
     summary_high_var = ttk.StringVar(value="0")
     summary_risk_var = ttk.StringVar(value="-")
 
-    summary_box = ttk.LabelFrame(tab_summary, text="Synthèse", font=("Helvetica", 11, "bold"))
-    summary_box.pack(fill="x", padx=14, pady=14)
+    summary_box = ttk.LabelFrame(tab_summary, text="Synthèse", font=("Helvetica", 10, "bold"))
+    summary_box.pack(fill="x", padx=14, pady=2)
 
     # Summary cards are distributed evenly across the available width.
     for col in range(4):
         summary_box.columnconfigure(col, weight=1, uniform="summary")
 
-    ttk.Label(summary_box, text="Lignes analysées", font=("Helvetica", 11, "bold"), anchor="center", justify="center").grid(row=0, column=0, padx=24, pady=(10, 4), sticky="ew")
-    ttk.Label(summary_box, textvariable=summary_scan_rows_var, font=("Helvetica", 16, "bold"), anchor="center", justify="center").grid(row=1, column=0, padx=24, pady=(0, 10), sticky="ew")
-    ttk.Label(summary_box, text="Alertes totales", font=("Helvetica", 11, "bold"), anchor="center", justify="center").grid(row=0, column=1, padx=24, pady=(10, 4), sticky="ew")
-    ttk.Label(summary_box, textvariable=summary_alerts_var, font=("Helvetica", 16, "bold"), anchor="center", justify="center").grid(row=1, column=1, padx=24, pady=(0, 10), sticky="ew")
-    ttk.Label(summary_box, text="Alertes critiques", font=("Helvetica", 11, "bold"), anchor="center", justify="center").grid(row=0, column=2, padx=24, pady=(10, 4), sticky="ew")
-    ttk.Label(summary_box, textvariable=summary_high_var, font=("Helvetica", 16, "bold"), anchor="center", justify="center").grid(row=1, column=2, padx=24, pady=(0, 10), sticky="ew")
-    ttk.Label(summary_box, text="Risque global", font=("Helvetica", 11, "bold"), anchor="center", justify="center").grid(row=0, column=3, padx=24, pady=(10, 4), sticky="ew")
-    ttk.Label(summary_box, textvariable=summary_risk_var, font=("Helvetica", 16, "bold"), anchor="center", justify="center").grid(row=1, column=3, padx=24, pady=(0, 10), sticky="ew")
+    ttk.Label(summary_box, text="Lignes analysées", font=("Helvetica", 10, "bold"), anchor="center", justify="center").grid(row=0, column=0, padx=24, pady=(4, 2), sticky="ew")
+    ttk.Label(summary_box, textvariable=summary_scan_rows_var, font=("Helvetica", 14, "bold"), anchor="center", justify="center").grid(row=1, column=0, padx=24, pady=(0, 4), sticky="ew")
+    ttk.Label(summary_box, text="Alertes totales", font=("Helvetica", 10, "bold"), anchor="center", justify="center").grid(row=0, column=1, padx=24, pady=(4, 2), sticky="ew")
+    ttk.Label(summary_box, textvariable=summary_alerts_var, font=("Helvetica", 14, "bold"), anchor="center", justify="center").grid(row=1, column=1, padx=24, pady=(0, 4), sticky="ew")
+    ttk.Label(summary_box, text="Alertes critiques", font=("Helvetica", 10, "bold"), anchor="center", justify="center").grid(row=0, column=2, padx=24, pady=(4, 2), sticky="ew")
+    ttk.Label(summary_box, textvariable=summary_high_var, font=("Helvetica", 14, "bold"), anchor="center", justify="center").grid(row=1, column=2, padx=24, pady=(0, 4), sticky="ew")
+    ttk.Label(summary_box, text="Risque global", font=("Helvetica", 10, "bold"), anchor="center", justify="center").grid(row=0, column=3, padx=24, pady=(4, 2), sticky="ew")
+    ttk.Label(summary_box, textvariable=summary_risk_var, font=("Helvetica", 14, "bold"), anchor="center", justify="center").grid(row=1, column=3, padx=24, pady=(0, 4), sticky="ew")
 
     ttk.Label(
         tab_summary,
@@ -178,6 +200,8 @@ def build_main_window(start_scan, open_settings, open_report, on_table_select, s
     style.configure("TNotebook.Tab", font=("Helvetica", 11, "bold"))
     style.configure("Treeview", rowheight=22)
     style.configure("Treeview.Heading", font=("Helvetica", 11, "bold"))
+    style.configure("warning.Striped.Horizontal.TProgressbar", thickness=20)
+    style.configure("Striped.Horizontal.TProgressbar", thickness=20)
     root.bind("<Return>", lambda _event: start_scan())
 
     return {

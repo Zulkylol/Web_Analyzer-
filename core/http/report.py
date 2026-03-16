@@ -54,27 +54,16 @@ def build_http_report(result: dict) -> dict:
     # --------------- CIBLE ET TRANSPORT -------------------
     # Section 1: initial target, final transport, and basic metrics.
     add_section("Cible et transport")
-    add_row("URL saisie", target.get("original_url", ""), comment="URL normalisee utilisee pour le scan")
+    add_row("URL saisie", target.get("original_url", ""), comment="URL normalisée utilisée pour le scan")
 
     if target.get("has_url_credentials"):
         add_row(
             "Credentials dans l'URL",
             "Oui",
             risk="HIGH",
-            comment="Credentials detectes dans l'URL",
+            comment="Credentials détectés dans l'URL",
             include=True,
         )
-
-    https_risk = transport.get("https_risk", "MEDIUM")
-    uses_https = bool(transport.get("uses_https"))
-    add_row(
-        "HTTPS active",
-        transport.get("https_value", "Oui" if uses_https else "Non"),
-        risk=https_risk,
-        comment=transport.get("https_comment", ""),
-        ok_when_info=uses_https,
-        include=str(https_risk).upper() != "INFO",
-    )
 
     add_row(
         "URL finale",
@@ -111,15 +100,26 @@ def build_http_report(result: dict) -> dict:
             "Version HTTP",
             "Inconnue",
             risk="MEDIUM",
-            comment="Impossible de determiner la version HTTP",
+            comment="Impossible de déterminer la version HTTP",
             check=STATUS_ICON["invalid"],
             include=True,
         )
 
+    https_risk = transport.get("https_risk", "MEDIUM")
+    uses_https = bool(transport.get("uses_https"))
+    add_row(
+        "HTTP active",
+        transport.get("https_value", "Oui" if uses_https else "Non"),
+        risk=https_risk,
+        comment=transport.get("https_comment", ""),
+        ok_when_info=uses_https,
+        include=str(https_risk).upper() != "INFO",
+    )
+
     time_risk = transport.get("time_risk", "INFO")
     add_row(
-        "Temps de reponse",
-        transport.get("time", 0.0),
+        "Temps de réponse",
+        f"{transport.get('time', 0.0)} seconde(s)",
         risk=time_risk,
         comment=transport.get("time_comment", ""),
         ok_when_info=bool(transport.get("time_ok")),
@@ -190,7 +190,7 @@ def build_http_report(result: dict) -> dict:
     # --------------- SECURITE DE CONTENU ------------------
     # Section 3: security of the received content and protective headers.
     if uses_https or content.get("header_findings"):
-        add_section("Securite de contenu / headers")
+        add_section("Sécurité de contenu / headers")
 
     if uses_https:
         mixed = bool(content.get("mixed_content"))
@@ -227,7 +227,7 @@ def build_http_report(result: dict) -> dict:
             severity = str(finding.get("severity", "INFO")).upper()
             header_ok = str(finding.get("status", "")).lower() == "ok"
             add_row(
-                f"Header de securite #{header_idx}",
+                f"Header de sécurité #{header_idx}",
                 finding.get("header", ""),
                 risk=severity,
                 comment=str(finding.get("issue", "")),
@@ -235,7 +235,7 @@ def build_http_report(result: dict) -> dict:
                 include=severity != "INFO",
             )
             if finding.get("recommendation"):
-                add_row("", "", comment="âž© Recommandation: "+finding["recommendation"], check="", tags=("recommendation",))
+                add_row("", "", comment="Recommandation: " + finding["recommendation"], check="", tags=("recommendation",))
 
     # -------------------- EXPOSITION ----------------------
     # Section 4: additional exposure surface around the HTTP target.
@@ -266,7 +266,7 @@ def build_http_report(result: dict) -> dict:
     methods = exposure.get("methods_exposure") or {}
     methods_risk = str(methods.get("risk", "INFO")).upper()
     add_row(
-        "Methodes HTTP exposees",
+        "Méthodes HTTP exposées",
         str(methods.get("value", "Unknown")),
         risk=methods_risk,
         comment=str(methods.get("comment", "")),

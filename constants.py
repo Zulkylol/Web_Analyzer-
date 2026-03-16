@@ -112,8 +112,6 @@ HIGHLY_SENSITIVE_COOKIE_NAMES = {
     "access_token",
     "refresh_token",
     "jwt",
-    "csrf_token",
-    "xsrf-token",
     "__host-session",
     "__secure-session",
 }

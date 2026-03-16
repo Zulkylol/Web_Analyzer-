@@ -58,8 +58,10 @@ def analyze_metadata(x509_cert: x509.Certificate) -> dict:
     # ----------------------- SIGNATURE -------------------------
     try:
         signature_hash = x509_cert.signature_hash_algorithm.name.lower()
-        signature_algorithm = x509_cert.signature_algorithm_oid._name.lower()
-        signature["value"] = signature_hash
+        signature_algorithm_oid = x509_cert.signature_algorithm_oid
+        signature_algorithm_name = getattr(signature_algorithm_oid, "_name", None) or signature_algorithm_oid.dotted_string
+        signature_algorithm = signature_algorithm_name.lower()
+        signature["value"] = signature_algorithm_name
 
         if "md5" in signature_hash:
             signature["ok"] = False

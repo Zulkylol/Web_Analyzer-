@@ -44,12 +44,28 @@ def scan_http_config(url: str) -> dict:
     request_headers = HEADER.copy()
 
     try:
-        response = requests.get(
-            normalized_url,
-            headers=request_headers,
-            timeout=5,
-            allow_redirects=True,
-        )
+        session = requests.Session()
+        session.max_redirects = 101
+        try:
+            response = session.get(
+                normalized_url,
+                headers=request_headers,
+                timeout=5,
+                allow_redirects=True,
+            )
+        except requests.exceptions.SSLError:
+            session.verify = False
+            response = session.get(
+                normalized_url,
+                headers=request_headers,
+                timeout=5,
+                allow_redirects=True,
+            )
+            transport["tls_bypassed"] = True
+            transport["tls_bypass_comment"] = (
+                "Analyse HTTP poursuivie sans validation du certificat TLS "
+                "après échec de la vérification stricte"
+            )
         
         
         # Block 1: immediate response information
@@ -87,7 +103,7 @@ def scan_http_config(url: str) -> dict:
             original_url=target["original_url"],
             final_url=target["final_url"],
             response=response,
-            requests_module=requests,
+            requests_module=session,
             headers=request_headers,
             timeout=5,
         )
@@ -133,13 +149,13 @@ def scan_http_config(url: str) -> dict:
         exposure["redirects"] = scan_redirections(response, normalized_url)
         exposure["standard_files"] = scan_standard_files(
             target["final_url"],
-            requests_module=requests,
+            requests_module=session,
             headers=request_headers,
             timeout=5,
         )
         exposure["methods_exposure"] = scan_exposed_methods(
             target["final_url"],
-            requests_module=requests,
+            requests_module=session,
             headers=request_headers,
             timeout=5,
         )

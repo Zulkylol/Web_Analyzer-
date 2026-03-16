@@ -1,8 +1,3 @@
-# core/tls/protocol.py
-
-# ===============================================================
-# IMPORTS
-# ===============================================================
 from __future__ import annotations
 
 import ssl
@@ -21,8 +16,6 @@ def analyze_tls_versions_and_policy(version_value: str, url: str) -> tuple[dict,
     Returns :
         tuple[dict, dict, dict] : version row, supported versions, policy row
     """
-    
-    # ----------------------- ACTUAL VERSION ---------------------------
     version = {"value": version_value, "ok": None, "comment": "", "risk": "MEDIUM"}
 
     if version_value == "TLSv1":
@@ -36,7 +29,7 @@ def analyze_tls_versions_and_policy(version_value: str, url: str) -> tuple[dict,
     elif version_value == "TLSv1.2":
         version["ok"] = True
         version["comment"] = "TLS 1.2 reste sécurisé, même s'il est progressivement remplacé par TLS 1.3"
-        version["risk"] = "LOW"
+        version["risk"] = "INFO"
     elif version_value == "TLSv1.3":
         version["ok"] = True
         version["comment"] = "TLS 1.3 est la version la plus moderne et actuellement recommandée"
@@ -46,8 +39,6 @@ def analyze_tls_versions_and_policy(version_value: str, url: str) -> tuple[dict,
         version["comment"] = "La version TLS négociée est inconnue ou n'a pas pu être analysée"
         version["risk"] = "MEDIUM"
 
-    
-    # --------------------- SUPPORTED VERSIONS -------------------------
     supported_versions = {}
     for tls_name, tls_version in SUPPORTED_TLS_VERSIONS:
         supported = server_supports_tls_version(url, tls_version)
@@ -75,7 +66,6 @@ def analyze_tls_versions_and_policy(version_value: str, url: str) -> tuple[dict,
             "risk": risk,
         }
 
-    # ----------------------- VERSION POLICY ---------------------------
     if supported_versions["TLS1.0"]["supported"] or supported_versions["TLS1.1"]["supported"]:
         disabled_legacy_versions = []
         if supported_versions["TLS1.0"]["supported"]:

@@ -19,7 +19,7 @@ def init_http_result(normalized_url: str) -> dict:
             "final_url": None,
             "has_url_credentials": False,
             "url_ok": True,
-            "url_comment": "OK",
+            "url_comment": "Identique à l'adresse saisie",
             "url_risk": "INFO",
         },
         "transport": {
@@ -27,6 +27,8 @@ def init_http_result(normalized_url: str) -> dict:
             "status_ok": False,
             "status_message": "",
             "status_risk": "INFO",
+            "tls_bypassed": False,
+            "tls_bypass_comment": "",
             "http_version": "",
             "http_ok": False,
             "http_comment": "",
@@ -45,7 +47,7 @@ def init_http_result(normalized_url: str) -> dict:
             "mixed_content_level": "",
             "mixed_content_risk": "INFO",
             "mixed_url": [],
-            "mixed_comment": "Aucun contenu mixte detecte",
+            "mixed_comment": "Aucun contenu mixte détecté",
             "header_findings": [],
         },
         "exposure": {

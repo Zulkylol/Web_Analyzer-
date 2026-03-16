@@ -35,12 +35,27 @@ def scan_cookies_config(url: str) -> dict:
     normalized = normalize_url(url)
 
     try:
-        response = requests.get(
-            normalized,
-            headers=HEADER,
-            timeout=8,
-            allow_redirects=True,
-        )
+        session = requests.Session()
+        try:
+            response = session.get(
+                normalized,
+                headers=HEADER,
+                timeout=8,
+                allow_redirects=True,
+            )
+        except requests.exceptions.SSLError:
+            session.verify = False
+            response = session.get(
+                normalized,
+                headers=HEADER,
+                timeout=8,
+                allow_redirects=True,
+            )
+            result["tls_bypassed"] = True
+            result["tls_bypass_comment"] = (
+                "Analyse cookies poursuivie sans validation du certificat TLS "
+                "après échec de la vérification stricte"
+            )
         result["final_url"] = response.url
         cookies = collect_response_cookies(response)
         # Une collision de scope signifie ici: meme nom de cookie, mais pas meme domaine/path.
@@ -71,9 +86,9 @@ def scan_cookies_config(url: str) -> dict:
         result["summary"]["total_findings"] = len(sorted_findings)
         result["summary"]["max_severity"] = max_severity(sorted_findings)
         result["summary"]["comment"] = (
-            "Aucun en-tete Set-Cookie detecte"
+            "Aucun en-tête Set-Cookie détecté"
             if not cookies
-            else "Analyse cookies terminee"
+            else "Analyse cookies terminée"
         )
     except requests.exceptions.RequestException as exc:
         result["errors"]["message"] = f"Cookie scan request failed: {exc}"

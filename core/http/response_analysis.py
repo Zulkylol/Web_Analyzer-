@@ -45,12 +45,19 @@ def detect_http_version(url: str, httpx_module) -> tuple[str, bool | None, str, 
         tuple[str, bool | None, str, str]:
             (http_version, http_ok, http_comment, http_risk)
     """
+    bypassed_tls = False
     try:
         with httpx_module.Client(http2=True, timeout=5) as client:
             response = client.get(url)
             http_version = str(getattr(response, "http_version", "") or "").upper()
     except Exception as exc:
-        return "Inconnue", None, f"Impossible de determiner la version HTTP via httpx: {exc}", "MEDIUM"
+        try:
+            with httpx_module.Client(http2=True, timeout=5, verify=False) as client:
+                response = client.get(url)
+                http_version = str(getattr(response, "http_version", "") or "").upper()
+                bypassed_tls = True
+        except Exception:
+            return "Inconnue", None, f"Impossible de déterminer la version HTTP via httpx: {exc}", "MEDIUM"
 
     if http_version in ("HTTP/3", "HTTP/2", "HTTP/1.1"):
         http_ok = True
@@ -63,8 +70,11 @@ def detect_http_version(url: str, httpx_module) -> tuple[str, bool | None, str, 
     else:
         http_version = "Inconnue"
         http_ok = None
-        http_comment = "httpx n'a pas expose de version HTTP exploitable"
+        http_comment = "httpx n'a pas exposé de version HTTP exploitable"
         http_risk = "MEDIUM"
+
+    if bypassed_tls:
+        http_comment = (http_comment + " (détection sans validation TLS)").strip()
 
     return http_version, http_ok, http_comment, http_risk
 
@@ -94,10 +104,10 @@ def analyze_url_transition(original_url: str, final_url: str) -> tuple[str, bool
         or final_parsed.username
         or final_parsed.password
     )
-    host_change_message = f"Changement d'hote ({shorten_url(original_url)} ⇒ {shorten_url(final_url)})"
+    host_change_message = f"Changement d'hôte ({shorten_url(original_url)} => {shorten_url(final_url)})"
 
     url_ok = True
-    url_comment = "OK"
+    url_comment = "Identique à l'adresse saisie"
     url_risk = "INFO"
     if has_host_change:
         url_ok = None
@@ -201,10 +211,10 @@ def evaluate_https_posture(
     else:
         https_value = "Non"
         if redirect_downgrade:
-            https_comment = "HTTPS redirige vers HTTP (downgrade detecte)"
+            https_comment = "HTTPS redirige vers HTTP (downgrade détecté)"
             https_risk = "HIGH"
         else:
-            https_comment = "HTTPS non detecte (ni URL finale HTTPS, ni probe HTTPS concluante)"
+            https_comment = "HTTPS non détecté (ni URL finale HTTPS, ni probe HTTPS concluante)"
             https_risk = "MEDIUM"
 
     return uses_https, https_value, https_comment, https_risk

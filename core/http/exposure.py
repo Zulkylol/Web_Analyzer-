@@ -47,7 +47,7 @@ def scan_standard_files(
                 findings.append(
                     {
                         "name": label,
-                        "value": "Present",
+                        "value": "Présent",
                         "risk": "INFO",
                         "comment": f"{path} accessible (HTTP 200)",
                         "url": str(getattr(resp, "url", "") or url),
@@ -61,12 +61,12 @@ def scan_standard_files(
                         "name": label,
                         "value": f"Protected ({code})",
                         "risk": "LOW",
-                        "comment": f"{path} existe mais acces restreint",
+                        "comment": f"{path} existe mais accès restreint",
                         "url": str(getattr(resp, "url", "") or url),
                     }
                 )
             else:
-                risk = "INFO" if label == "robots.txt" else "LOW"
+                risk = "INFO" if label in {"robots.txt", "security.txt"} else "LOW"
                 findings.append(
                     {
                         "name": label,
@@ -82,7 +82,7 @@ def scan_standard_files(
                     "name": label,
                     "value": "Unknown",
                     "risk": "LOW",
-                    "comment": f"Echec de verification: {e}",
+                    "comment": f"Échec de vérification: {e}",
                     "url": url,
                 }
             )
@@ -141,7 +141,7 @@ def scan_exposed_methods(
         if not methods:
             result["value"] = "Not disclosed"
             result["risk"] = "INFO"
-            result["comment"] = "Aucune methode exposee via en-tete Allow"
+            result["comment"] = "Aucune méthode exposée via en-tête Allow"
             return result
 
         # Risk mapping 
@@ -156,16 +156,16 @@ def scan_exposed_methods(
         # Populate risk and comment
         if present_high:
             result["risk"] = "HIGH"
-            result["comment"] = f"Methodes sensibles exposees: {', '.join(present_high)}"
+            result["comment"] = f"Méthodes sensibles exposées: {', '.join(present_high)}"
         elif present_medium:
             result["risk"] = "MEDIUM"
-            result["comment"] = f"Methodes d'ecriture exposees: {', '.join(present_medium)}"
+            result["comment"] = f"Méthodes d'écriture exposées: {', '.join(present_medium)}"
         elif present_low:
             result["risk"] = "LOW"
-            result["comment"] = f"Methode a surveiller: {', '.join(present_low)}"
+            result["comment"] = f"Méthode à surveiller: {', '.join(present_low)}"
         else:
             result["risk"] = "INFO"
-            result["comment"] = "Seulement des methodes standard exposees"
+            result["comment"] = "Seulement des méthodes standard exposées"
 
         result["value"] = ", ".join(methods)
         return result
