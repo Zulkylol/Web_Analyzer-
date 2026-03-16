@@ -12,70 +12,82 @@ from cryptography.hazmat.primitives import hashes
 # ===============================================================
 # FUNCTION : analyze_metadata
 # ===============================================================
-def analyze_metadata(x509_cert: x509.Certificate) -> tuple[dict, dict, dict]:
+def analyze_metadata(x509_cert: x509.Certificate) -> dict:
     """
-    Analyze certificate metadata (version, serial number, and signature).
+    Analyze certificate metadata fields.
 
-    Returns:
-        tuple[dict, dict, dict]:
-            - version
-            - serial
-            - signature
+    Returns :
+        dict : metadata rows
     """
-    version = {"id": "", "ok": False, "comment": ""}
-    serial = {"hex": "", "ok": True, "comment": ""}
-    signature = {
-        "hash_algorithm": "",
-        "fingerprint_sha256": "",
-        "ok": True,
-        "comment": "",
-    }
+    version = {"value": "", "ok": False, "comment": "", "risk": "MEDIUM"}
+    serial = {"value": "", "ok": True, "comment": "", "risk": "INFO"}
+    signature = {"value": "", "ok": True, "comment": "", "risk": "INFO"}
+    fingerprint = {"value": "", "comment": "Empreinte SHA-256 du certificat présenté par le serveur", "risk": "INFO"}
 
-    version["id"] = x509_cert.version.name
+    version["value"] = x509_cert.version.name
     if x509_cert.version.name != "v3":
         version["ok"] = False
-        version["comment"] = "Certificat non v3 (obsolete)."
+        version["comment"] = "Le certificat utilise une version antérieure à X.509 v3"
+        version["risk"] = "MEDIUM"
     else:
         version["ok"] = True
-        version["comment"] = "Certificat X.509 v3."
+        version["comment"] = "Le certificat utilise le format X.509 v3"
+        version["risk"] = "INFO"
 
     serial_number = x509_cert.serial_number
     serial_bit_length = serial_number.bit_length()
-    serial["hex"] = hex(serial_number)
+    serial["value"] = hex(serial_number)
 
     if serial_number <= 0:
         serial["ok"] = False
-        serial["comment"] = "Serial non valide (doit etre positif)."
+        serial["comment"] = "Le numéro de série n'est pas valide ; il doit être strictement positif"
+        serial["risk"] = "INFO"
     elif serial_bit_length < 32:
         serial["ok"] = True
-        serial["comment"] = f"Serial tres court ({serial_bit_length} bits) : possible PKI interne/ancienne."
+        serial["comment"] = (
+            f"Le numéro de série est très court ({serial_bit_length} bits), ce qui évoque souvent une PKI interne ou ancienne"
+        )
+        serial["risk"] = "INFO"
     else:
         serial["ok"] = True
-        serial["comment"] = f"Serial OK ({serial_bit_length} bits)."
+        serial["comment"] = f"Le numéro de série a une longueur correcte ({serial_bit_length} bits)"
+        serial["risk"] = "INFO"
 
     try:
         signature_hash = x509_cert.signature_hash_algorithm.name.lower()
         signature_algorithm = x509_cert.signature_algorithm_oid._name.lower()
-        signature["hash_algorithm"] = signature_hash
+        signature["value"] = signature_hash
 
         if "md5" in signature_hash:
             signature["ok"] = False
-            signature["comment"] = "Signature MD5 (critique)."
+            signature["comment"] = "Une signature MD5 a été détectée ; cet algorithme est critique"
+            signature["risk"] = "HIGH"
         elif "sha1" in signature_hash:
             signature["ok"] = False
-            signature["comment"] = "Signature SHA-1 (obsolete)."
+            signature["comment"] = "Une signature SHA-1 a été détectée ; cet algorithme est aujourd'hui obsolète"
+            signature["risk"] = "HIGH"
         elif "dsa" in signature_algorithm:
             signature["ok"] = None
-            signature["comment"] = "Signature DSA (deconseillee)."
+            signature["comment"] = "Une signature DSA a été détectée ; cet algorithme est déconseillé pour TLS"
+            signature["risk"] = "MEDIUM"
         else:
             signature["ok"] = True
-            signature["comment"] = "Signature moderne (SHA-2+)."
+            signature["comment"] = "L'algorithme de signature appartient à une famille moderne (SHA-2 ou supérieure)"
+            signature["risk"] = "INFO"
     except Exception:
-        signature["hash_algorithm"] = ""
+        signature["value"] = ""
+        signature["ok"] = None
+        signature["comment"] = "Impossible d'analyser l'algorithme de signature du certificat"
+        signature["risk"] = "MEDIUM"
 
     try:
-        signature["fingerprint_sha256"] = x509_cert.fingerprint(hashes.SHA256()).hex()
+        fingerprint["value"] = x509_cert.fingerprint(hashes.SHA256()).hex()
     except Exception:
-        signature["fingerprint_sha256"] = ""
+        fingerprint["value"] = ""
 
-    return version, serial, signature
+    return {
+        "version": version,
+        "serial": serial,
+        "signature": signature,
+        "fingerprint": fingerprint,
+    }

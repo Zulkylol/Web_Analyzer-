@@ -5,74 +5,77 @@
 # ===============================================================
 def init_tls_result() -> dict:
     """
-    Initialize and return the default result dictionary used for TLS security analysis.
+    Initialize the default result dictionary for TLS analysis.
 
     Returns:
-        dict: A pre-structured dictionary containing all fields required
-            for the TLS analysis workflow, initialized with default values.
+        dict: Default TLS result structure.
     """
 
-    # La structure TLS est plus hierarchique car plusieurs sous-analyses l'alimentent.
     result = {
+        "identity": {
+            "common_name": "",
+            "common_name_comment": "Nom commun (CN) présenté par le certificat du serveur",
+            "common_name_risk": "INFO",
+            "san_dns": [],
+            "san_ok": False,
+            "san_comment": "",
+            "san_risk": "HIGH",
+            "san_warning": "",
+        },
+        "trust": {
+            "authority_name": "",
+            "authority_ok": False,
+            "authority_comment": "",
+            "authority_risk": "HIGH",
+            "is_self_signed": False,
+            "self_signed_ok": True,
+            "self_signed_comment": "",
+            "self_signed_risk": "INFO",
+        },
         "certificate": {
-            "subject": {"common_name": "", "san_dns": []},
-            "issuer": {"common_name": ""},
-            "version": {"id": "", "ok": False, "comment": ""},
-            "validity": {
-                "not_before": "",
-                "not_after": "",
-                "is_valid_now": False,
-                "expires_ok": False,
-                "expires_soon_comment": "",
-            },
-            "serial": {"hex": "", "ok": True, "comment": ""},
-            "signature": {
-                "hash_algorithm": "",
-                "fingerprint_sha256": "",
-                "ok": True,
-                "comment": "",
-            },
+            "valid_from": {"value": "", "ok": False, "comment": "", "risk": "HIGH"},
+            "valid_to": {"value": "", "ok": False, "comment": "", "risk": "HIGH"},
+            "version": {"value": "", "ok": False, "comment": "", "risk": "MEDIUM"},
+            "serial": {"value": "", "ok": True, "comment": "", "risk": "INFO"},
+            "signature": {"value": "", "ok": True, "comment": "", "risk": "INFO"},
+            "fingerprint": {"value": "", "comment": "Empreinte SHA-256 du certificat présenté par le serveur", "risk": "INFO"},
             "public_key": {
+                "value": "",
                 "type": "",
                 "size": None,
                 "curve": "",
                 "ok": True,
                 "comment": "",
-                "summary": "",
+                "risk": "INFO",
             },
             "extensions": {
-                "key_usage": "",
-                "extended_key_usage": "",
-                "basic_constraints": "",
-                "crl_distribution_points": "",
-                "basic_constraints_ok": None,
-                "basic_constraints_comment": "",
-                "eku_ok": None,
-                "eku_comment": "",
-                "ku_ok": None,
-                "ku_comment": "",
-                "crl_ok": None,
-                "crl_comment": "",
+                "basic_constraints": {"value": "", "ok": None, "comment": "", "risk": "MEDIUM"},
+                "key_usage": {"value": "", "ok": None, "comment": "", "risk": "MEDIUM"},
+                "extended_key_usage": {"value": "", "ok": None, "comment": "", "risk": "MEDIUM"},
+                "crl_distribution_points": {"value": "", "ok": None, "comment": "", "risk": "LOW"},
             },
         },
-        "trust": {"is_trusted": False, "is_self_signed": False},
-        "hostname_check": {
-            "match": False,
-            "comment": "",
-            "warnings": {"multi_domain": ""},
-        },
-        "tls": {
-            "negotiated_version": "",
-            "nv_ok": False,
-            "nv_comment": "",
+        "protocol": {
+            "version": {"value": "", "ok": False, "comment": "", "risk": "MEDIUM"},
             "supported_versions": {},
-            "weak_cipher_support": {},
-            "weak_cipher_ok": True,
-            "weak_cipher_comment": "",
-            "policy": {"ok": True, "comment": ""},
-            "cipher": {"name": "", "bits": 0, "ok": True, "comment": ""},
+            "policy": {"value": "", "ok": True, "comment": "", "risk": "INFO"},
+            "cipher": {
+                "value": "",
+                "name": "",
+                "bits": 0,
+                "ok": True,
+                "comment": "",
+                "risk": "INFO",
+                "bits_risk": "INFO",
+            },
+            "weak_ciphers": {
+                "value": "OK",
+                "support": {},
+                "ok": True,
+                "comment": "",
+                "risk": "INFO",
+            },
         },
-        "risks": {},
         "errors": {"message": ""},
         "report": {},
     }

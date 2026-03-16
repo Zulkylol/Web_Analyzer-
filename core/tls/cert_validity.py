@@ -15,38 +15,51 @@ from cryptography import x509
 # ===============================================================
 def analyze_validity(x509_cert: x509.Certificate) -> dict:
     """
-    Check certificate validity dates and expiration status.
+    Analyze certificate validity dates.
 
-    Returns:
-        dict: Validity analysis block.
+    Returns :
+        dict : validity rows
     """
-    validity = {
-        "not_before": x509_cert.not_valid_before_utc.isoformat(),
-        "not_after": x509_cert.not_valid_after_utc.isoformat(),
-        "is_valid_now": False,
-        "expires_ok": False,
-        "expires_soon_comment": "",
-    }
+    valid_from = {"value": x509_cert.not_valid_before_utc.isoformat(), "ok": False, "comment": "", "risk": "HIGH"}
+    valid_to = {"value": x509_cert.not_valid_after_utc.isoformat(), "ok": False, "comment": "", "risk": "HIGH"}
+
     now = datetime.now(timezone.utc)
 
     try:
         not_before = x509_cert.not_valid_before_utc
         not_after = x509_cert.not_valid_after_utc
-        validity["is_valid_now"] = not_before <= now <= not_after
+        is_valid_now = not_before <= now <= not_after
         days_left = (not_after - now).days
 
-        if days_left < 0:
-            validity["expires_ok"] = False
-            validity["expires_soon_comment"] = "Certificat expire."
-        elif days_left < 30:
-            validity["expires_ok"] = None
-            validity["expires_soon_comment"] = f"Certificat expire bientot ({days_left} jours restants)."
-        else:
-            validity["expires_ok"] = True
-            validity["expires_soon_comment"] = f"Validite confortable ({days_left} jours restants)."
-    except Exception:
-        validity["is_valid_now"] = False
-        validity["expires_ok"] = None
-        validity["expires_soon_comment"] = "Impossible d'evaluer la validite."
+        valid_from["ok"] = is_valid_now
+        valid_from["comment"] = (
+            "Le certificat est actuellement dans sa période de validité"
+            if is_valid_now
+            else "Le certificat est hors de sa période de validité"
+        )
+        valid_from["risk"] = "INFO" if is_valid_now else "HIGH"
 
-    return validity
+        if days_left < 0:
+            valid_to["ok"] = False
+            valid_to["comment"] = "Le certificat est déjà expiré"
+            valid_to["risk"] = "HIGH"
+        elif days_left < 30:
+            valid_to["ok"] = None
+            valid_to["comment"] = f"Le certificat expire bientôt ({days_left} jours restants)"
+            valid_to["risk"] = "MEDIUM"
+        else:
+            valid_to["ok"] = True
+            valid_to["comment"] = f"La durée de validité restante est confortable ({days_left} jours restants)"
+            valid_to["risk"] = "INFO"
+    except Exception:
+        valid_from["ok"] = False
+        valid_from["comment"] = "Impossible d'évaluer si le certificat est actuellement valide"
+        valid_from["risk"] = "HIGH"
+        valid_to["ok"] = None
+        valid_to["comment"] = "Impossible d'évaluer la date d'expiration du certificat"
+        valid_to["risk"] = "MEDIUM"
+
+    return {
+        "valid_from": valid_from,
+        "valid_to": valid_to,
+    }

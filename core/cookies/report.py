@@ -64,7 +64,7 @@ def build_cookies_report(result: dict) -> dict:
         "Nombre de cookies",
         str(total_cookies),
         risk=cookie_count_risk,
-        comment=f"Cookies sensibles detectes: {sensitive_cookies}.",
+        comment=f"Cookies sensibles detectes: {sensitive_cookies}",
         include=cookie_count_risk != "INFO",
     )
     add_row("Nombre d'alertes", str(summary.get("total_findings", 0)))
@@ -74,7 +74,7 @@ def build_cookies_report(result: dict) -> dict:
         "Severite max",
         max_severity,
         risk=max_severity,
-        comment="Niveau de risque le plus eleve detecte.",
+        comment="Niveau de risque le plus eleve detecte",
     )
 
     # Section 2: findings consolides, tries par severite.
@@ -92,7 +92,7 @@ def build_cookies_report(result: dict) -> dict:
             if finding.get("recommendation"):
                 add_row("", "", comment="➩ Recommandation: "+finding["recommendation"], check="", tags=("recommendation",))
     else:
-        add_row("Findings cookies", "-", risk="INFO", comment="Aucun probleme de configuration cookie detecte.", check=STATUS_ICON["ok"])
+        add_row("Findings cookies", "-", risk="INFO", comment="Aucun probleme de configuration cookie detecte", check=STATUS_ICON["ok"])
 
     if cookies:
         # Section 3: detail attribut par attribut pour chaque cookie recu.

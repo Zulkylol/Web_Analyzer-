@@ -1,4 +1,4 @@
-# core/http/headers_security.py
+# core/http/security_headers.py
 
 # ===============================================================
 # IMPORTS
@@ -200,7 +200,7 @@ def scan_security_headers(
                     "weak",
                     "low",
                     "CSP sans object-src 'none' (plugins)",
-                    "Ajouter: object-src 'none'.",
+                    "Ajouter: object-src 'none'",
                     active_value,
                 )
             else:
@@ -257,7 +257,7 @@ def scan_security_headers(
                 "X-Content-Type-Options",
                 "missing",
                 expected("X-Content-Type-Options"),
-                "Protection contre MIME sniffing absente.",
+                "Protection contre MIME sniffing absente",
                 "Ajouter: X-Content-Type-Options: Nosniff",
                 None,
             )

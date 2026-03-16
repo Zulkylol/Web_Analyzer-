@@ -4,7 +4,7 @@ import requests
 from constants import HEADER, SECURITY_HEADERS
 from core.http.errors import map_http_scan_error
 from core.http.exposure import scan_exposed_methods, scan_standard_files
-from core.http.headers_security import scan_security_headers
+from core.http.security_headers import scan_security_headers
 from core.http.mixed_content import detect_mixed_content, evaluate_mixed_content_risk
 from core.http.report import build_http_report
 from core.http.redirects import scan_redirections

@@ -128,7 +128,7 @@ def evaluate_https_posture(
     """
     uses_https = str(final_url or "").lower().startswith("https://")
     https_value = "Oui" if uses_https else "Non"
-    https_comment = "URL finale en HTTPS." if uses_https else "URL finale en HTTP."
+    https_comment = "URL finale en HTTPS" if uses_https else "URL finale en HTTP"
     https_risk = "INFO" if uses_https else "MEDIUM"
 
     parsed_original = urlparse(original_url or "")
@@ -203,7 +203,7 @@ def evaluate_https_posture(
             https_comment = "HTTPS redirige vers HTTP (downgrade detecte)"
             https_risk = "HIGH"
         else:
-            https_comment = "HTTPS non detecte (ni URL finale HTTPS, ni probe HTTPS concluante)."
+            https_comment = "HTTPS non detecte (ni URL finale HTTPS, ni probe HTTPS concluante)"
             https_risk = "MEDIUM"
 
     return uses_https, https_value, https_comment, https_risk
@@ -230,7 +230,7 @@ def adjust_url_risk_with_https_posture(
         and https_value in {"Oui", "Partiel"}
     ):
         adjusted_risk = "LOW"
-        extra = "HTTP observe par requests, mais HTTPS est disponible."
+        extra = "HTTP observe par requests, mais HTTPS est disponible"
         if extra not in adjusted_comment:
             adjusted_comment = (adjusted_comment + " " + extra).strip()
 

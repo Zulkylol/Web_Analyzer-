@@ -81,8 +81,8 @@ def build_scope_collision_findings(duplicate_names: set[str]) -> list[dict]:
             "scope",
             "low",
             name,
-            "Meme nom de cookie utilise sur plusieurs scopes domain/path.",
-            "Uniformiser les scopes ou renommer les cookies pour eviter les collisions.",
+            "Meme nom de cookie utilise sur plusieurs scopes domain/path",
+            "Uniformiser les scopes ou renommer les cookies pour eviter les collisions",
         )
     return findings
 
@@ -114,8 +114,8 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
             "secure",
             "high" if highly_sensitive else "low",
             name,
-            "Le cookie est servi en HTTPS sans attribut Secure.",
-            "Ajouter Secure pour forcer l'envoi du cookie uniquement en HTTPS.",
+            "Le cookie est servi en HTTPS sans attribut Secure",
+            "Ajouter Secure pour forcer l'envoi du cookie uniquement en HTTPS",
             status="missing",
         )
 
@@ -125,8 +125,8 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
             "httponly",
             "high" if highly_sensitive else "medium",
             name,
-            "Cookie de session/authentification sans HttpOnly.",
-            "Ajouter HttpOnly pour limiter l'acces via JavaScript (XSS).",
+            "Cookie de session/authentification sans HttpOnly",
+            "Ajouter HttpOnly pour limiter l'acces via JavaScript (XSS)",
             status="missing",
         )
 
@@ -136,8 +136,8 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
             "samesite",
             "medium" if sensitive else "low",
             name,
-            "Attribut SameSite absent.",
-            "Definir SameSite=Lax (ou Strict selon le besoin fonctionnel).",
+            "Attribut SameSite absent",
+            "Definir SameSite=Lax (ou Strict selon le besoin fonctionnel)",
             status="missing",
         )
 
@@ -147,8 +147,8 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
             "samesite_secure",
             "high",
             name,
-            "SameSite=None sans Secure.",
-            "Avec SameSite=None, Secure est requis par les navigateurs modernes.",
+            "SameSite=None sans Secure",
+            "Avec SameSite=None, Secure est requis par les navigateurs modernes",
             status="invalid",
         )
 
@@ -158,8 +158,8 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
             "samesite",
             "low",
             name,
-            f"Valeur SameSite non reconnue: {samesite}.",
-            "Utiliser Strict, Lax ou None.",
+            f"Valeur SameSite non reconnue: {samesite}",
+            "Utiliser Strict, Lax ou None",
             status="invalid",
         )
 
@@ -169,8 +169,8 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
             "type",
             "low",
             name,
-            "Cookie sensible persistant (non-session).",
-            "Preferer un cookie de session si possible pour les identifiants sensibles.",
+            "Cookie sensible persistant (non-session)",
+            "Preferer un cookie de session si possible pour les identifiants sensibles",
         )
 
     if highly_sensitive and isinstance(max_age, int) and max_age > 60 * 60 * 24 * 30:
@@ -179,8 +179,8 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
             "type",
             "medium",
             name,
-            f"Duree de vie longue pour un cookie sensible ({max_age}s).",
-            "Reduire Max-Age au strict necessaire.",
+            f"Duree de vie longue pour un cookie sensible ({max_age}s)",
+            "Reduire Max-Age au strict necessaire",
         )
 
     if domain and source_host and domain.startswith(".") and not source_host.endswith(domain.lstrip(".").lower()):
@@ -189,8 +189,8 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
             "domain",
             "low",
             name,
-            f"Portee domaine large ({domain}).",
-            "Si possible, restreindre Domain a l'hote le plus specifique.",
+            f"Portee domaine large ({domain})",
+            "Si possible, restreindre Domain a l'hote le plus specifique",
         )
 
     if highly_sensitive and path == "/":
@@ -199,8 +199,8 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
             "path",
             "low",
             name,
-            "Sensitive cookie path is root (/).",
-            "Restrict Path where possible.",
+            "Sensitive cookie path is root (/)",
+            "Restrict Path where possible",
         )
 
     if size > 4096:
@@ -209,8 +209,8 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
             "size",
             "medium",
             name,
-            f"Taille de cookie elevee ({size} octets, > 4096).",
-            "Reduire la taille pour eviter troncature/rejet par navigateur ou proxy.",
+            f"Taille de cookie elevee ({size} octets, > 4096)",
+            "Reduire la taille pour eviter troncature/rejet par navigateur ou proxy",
         )
 
     if name.startswith("__Host-") and (not secure or domain or path != "/"):
@@ -219,8 +219,8 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
             "secure",
             "high",
             name,
-            "Le prefixe __Host- est invalide (regles non respectees).",
-            "__Host- exige Secure, Path=/ et aucun attribut Domain.",
+            "Le prefixe __Host- est invalide (regles non respectees)",
+            "__Host- exige Secure, Path=/ et aucun attribut Domain",
             status="invalid",
         )
 
@@ -230,8 +230,8 @@ def build_cookie_findings(cookie: dict) -> list[dict]:
             "secure",
             "high",
             name,
-            "Le prefixe __Secure- est utilise sans Secure.",
-            "Ajouter Secure pour respecter les exigences du prefixe __Secure-.",
+            "Le prefixe __Secure- est utilise sans Secure",
+            "Ajouter Secure pour respecter les exigences du prefixe __Secure-",
             status="invalid",
         )
 

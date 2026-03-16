@@ -66,9 +66,9 @@ def scan_cookies_config(url: str) -> dict:
         result["summary"]["total_findings"] = len(sorted_findings)
         result["summary"]["max_severity"] = max_severity(sorted_findings)
         result["summary"]["comment"] = (
-            "Aucun en-tete Set-Cookie detecte."
+            "Aucun en-tete Set-Cookie detecte"
             if not cookies
-            else "Analyse cookies terminee."
+            else "Analyse cookies terminee"
         )
     except requests.exceptions.RequestException as exc:
         result["error"] = f"Cookie scan request failed: {exc}"

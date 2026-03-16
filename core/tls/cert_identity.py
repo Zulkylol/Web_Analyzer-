@@ -13,7 +13,12 @@ from cryptography.x509.oid import NameOID
 # FUNCTION : _normalize_dns_name
 # ===============================================================
 def _normalize_dns_name(value: str) -> str:
-    """Normalize DNS names for safe comparison."""
+    """
+    Normalize a DNS name for comparison.
+
+    Returns :
+        str : normalized name
+    """
     return str(value or "").strip().rstrip(".").lower()
 
 
@@ -22,10 +27,10 @@ def _normalize_dns_name(value: str) -> str:
 # ===============================================================
 def _dns_name_matches(pattern: str, hostname: str) -> bool:
     """
-    Match hostname against cert identity with strict wildcard handling.
+    Match a hostname against a certificate pattern.
 
-    Accepted wildcard form: "*.example.com" (left-most label only),
-    matching exactly one subdomain label.
+    Returns :
+        bool : match result
     """
     pattern_text = _normalize_dns_name(pattern)
     hostname_text = _normalize_dns_name(hostname)
@@ -33,7 +38,6 @@ def _dns_name_matches(pattern: str, hostname: str) -> bool:
         return False
 
     if pattern_text.startswith("*."):
-        # Only accept the standard left-most-label wildcard form.
         suffix = pattern_text[2:]
         if not suffix or "." not in suffix:
             return False
@@ -47,58 +51,54 @@ def _dns_name_matches(pattern: str, hostname: str) -> bool:
 # ===============================================================
 # FUNCTION : analyze_identity
 # ===============================================================
-def analyze_identity(x509_cert: x509.Certificate, hostname_for_match: str) -> tuple[dict, dict, dict]:
+def analyze_identity(x509_cert: x509.Certificate, hostname_for_match: str) -> dict:
     """
-    Extract certificate identity information and evaluate hostname matching.
+    Analyze certificate identity and SAN matching.
 
-    Returns:
-        tuple[dict, dict, dict]:
-            - subject
-            - issuer
-            - hostname_check
+    Returns :
+        dict : identity analysis
     """
-    subject = {"common_name": "", "san_dns": []}
-    issuer = {"common_name": ""}
-    hostname_check = {
-        "match": False,
-        "comment": "",
-        "warnings": {"multi_domain": ""},
+    identity = {
+        "common_name": "",
+        "common_name_comment": "Nom commun (CN) présenté par le certificat du serveur",
+        "common_name_risk": "INFO",
+        "san_dns": [],
+        "san_ok": False,
+        "san_comment": "",
+        "san_risk": "HIGH",
+        "san_warning": "",
     }
 
     try:
-        subject["common_name"] = x509_cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
+        identity["common_name"] = x509_cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
     except IndexError:
-        subject["common_name"] = ""
+        identity["common_name"] = ""
 
-    for attribute in x509_cert.issuer:
-        if attribute.oid._name == "commonName":
-            issuer["common_name"] = attribute.value
-            break
-
-    common_name = subject["common_name"]
+    common_name = identity["common_name"]
 
     try:
         san_extension = x509_cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)
         san_dns = san_extension.value.get_values_for_type(x509.DNSName)
-        subject["san_dns"] = [dns_name for dns_name in san_dns if dns_name != common_name]
+        identity["san_dns"] = [dns_name for dns_name in san_dns if dns_name != common_name]
     except Exception:
-        subject["san_dns"] = []
+        identity["san_dns"] = []
 
-    identity_candidates = [common_name] + subject["san_dns"]
+    identity_candidates = [common_name] + identity["san_dns"]
     match = any(_dns_name_matches(candidate, hostname_for_match) for candidate in identity_candidates)
-    hostname_check["match"] = match
-    hostname_check["comment"] = (
-        "Le certificat correspond au domaine"
+    identity["san_ok"] = match
+    identity["san_comment"] = (
+        "Le certificat présenté correspond bien au domaine analysé"
         if match
-        else "Le certificat ne correspond PAS au domaine"
+        else "Le certificat présenté ne correspond pas au domaine analysé"
     )
+    identity["san_risk"] = "INFO" if match else "HIGH"
 
-    san_count = len(subject["san_dns"])
+    san_count = len(identity["san_dns"])
     if san_count > 200:
-        hostname_check["warnings"]["multi_domain"] = "Certificat multi-domaines massif"
+        identity["san_warning"] = "Certificat multi-domaines massif avec un très grand nombre de SAN"
     elif san_count > 50:
-        hostname_check["warnings"]["multi_domain"] = "Certificat multi-domaines important"
+        identity["san_warning"] = "Certificat multi-domaines important avec de nombreux SAN"
     else:
-        hostname_check["warnings"]["multi_domain"] = "Certificat avec peu de domaine"
+        identity["san_warning"] = "Certificat avec un nombre limité de SAN déclarés"
 
-    return subject, issuer, hostname_check
+    return identity

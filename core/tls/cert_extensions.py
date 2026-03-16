@@ -13,24 +13,16 @@ from cryptography import x509
 # ===============================================================
 def analyze_extensions(x509_cert: x509.Certificate) -> dict:
     """
-    Extract and validate common X.509 extensions for a TLS server certificate.
+    Analyze common certificate extensions.
 
-    Returns:
-        dict: Extensions analysis block.
+    Returns :
+        dict : extension rows
     """
     extensions = {
-        "key_usage": "",
-        "extended_key_usage": "",
-        "basic_constraints": "",
-        "crl_distribution_points": "",
-        "basic_constraints_ok": None,
-        "basic_constraints_comment": "",
-        "eku_ok": None,
-        "eku_comment": "",
-        "ku_ok": None,
-        "ku_comment": "",
-        "crl_ok": None,
-        "crl_comment": "",
+        "basic_constraints": {"value": "", "ok": None, "comment": "", "risk": "MEDIUM"},
+        "key_usage": {"value": "", "ok": None, "comment": "", "risk": "MEDIUM"},
+        "extended_key_usage": {"value": "", "ok": None, "comment": "", "risk": "MEDIUM"},
+        "crl_distribution_points": {"value": "", "ok": None, "comment": "", "risk": "LOW"},
     }
 
     for extension_class, key in [
@@ -41,52 +33,63 @@ def analyze_extensions(x509_cert: x509.Certificate) -> dict:
     ]:
         try:
             extension = x509_cert.extensions.get_extension_for_class(extension_class)
-            extensions[key] = str(extension.value)
+            extensions[key]["value"] = str(extension.value)
         except Exception:
             pass
 
-    basic_constraints = extensions["basic_constraints"]
+    basic_constraints = extensions["basic_constraints"]["value"]
     if basic_constraints:
         if "CA=True" in basic_constraints:
-            extensions["basic_constraints_ok"] = False
-            extensions["basic_constraints_comment"] = "Certificat marque comme CA (anormal pour serveur)."
+            extensions["basic_constraints"]["ok"] = False
+            extensions["basic_constraints"]["comment"] = "Le certificat est marqué comme CA, ce qui est anormal pour un certificat serveur"
+            extensions["basic_constraints"]["risk"] = "HIGH"
         else:
-            extensions["basic_constraints_ok"] = True
-            extensions["basic_constraints_comment"] = "Certificat non CA."
+            extensions["basic_constraints"]["ok"] = True
+            extensions["basic_constraints"]["comment"] = "Le certificat n'est pas déclaré comme autorité de certification"
+            extensions["basic_constraints"]["risk"] = "INFO"
     else:
-        extensions["basic_constraints_ok"] = None
-        extensions["basic_constraints_comment"] = "BasicConstraints absent."
+        extensions["basic_constraints"]["ok"] = None
+        extensions["basic_constraints"]["comment"] = "L'extension Basic Constraints est absente du certificat"
+        extensions["basic_constraints"]["risk"] = "MEDIUM"
 
-    extended_key_usage = extensions["extended_key_usage"]
+    extended_key_usage = extensions["extended_key_usage"]["value"]
     if extended_key_usage:
         if "serverAuth" in extended_key_usage or "TLS Web Server Authentication" in extended_key_usage:
-            extensions["eku_ok"] = True
-            extensions["eku_comment"] = "EKU autorise l'authentification serveur."
+            extensions["extended_key_usage"]["ok"] = True
+            extensions["extended_key_usage"]["comment"] = "L'EKU autorise explicitement l'authentification serveur TLS"
+            extensions["extended_key_usage"]["risk"] = "INFO"
         else:
-            extensions["eku_ok"] = False
-            extensions["eku_comment"] = "EKU ne contient pas serverAuth."
+            extensions["extended_key_usage"]["ok"] = False
+            extensions["extended_key_usage"]["comment"] = "L'EKU est présent mais ne contient pas l'usage serverAuth"
+            extensions["extended_key_usage"]["risk"] = "MEDIUM"
     else:
-        extensions["eku_ok"] = None
-        extensions["eku_comment"] = "EKU absent."
+        extensions["extended_key_usage"]["ok"] = None
+        extensions["extended_key_usage"]["comment"] = "L'extension Extended Key Usage est absente du certificat"
+        extensions["extended_key_usage"]["risk"] = "MEDIUM"
 
-    key_usage = extensions["key_usage"]
+    key_usage = extensions["key_usage"]["value"]
     if key_usage:
         if "digital_signature" in key_usage:
-            extensions["ku_ok"] = True
-            extensions["ku_comment"] = "digitalSignature present."
+            extensions["key_usage"]["ok"] = True
+            extensions["key_usage"]["comment"] = "L'usage digitalSignature est bien présent dans le certificat"
+            extensions["key_usage"]["risk"] = "INFO"
         else:
-            extensions["ku_ok"] = False
-            extensions["ku_comment"] = "digitalSignature absent."
+            extensions["key_usage"]["ok"] = False
+            extensions["key_usage"]["comment"] = "L'usage digitalSignature est absent, ce qui est atypique pour TLS"
+            extensions["key_usage"]["risk"] = "MEDIUM"
     else:
-        extensions["ku_ok"] = None
-        extensions["ku_comment"] = "KeyUsage absent."
+        extensions["key_usage"]["ok"] = None
+        extensions["key_usage"]["comment"] = "L'extension Key Usage est absente du certificat"
+        extensions["key_usage"]["risk"] = "MEDIUM"
 
-    crl_distribution_points = extensions["crl_distribution_points"]
+    crl_distribution_points = extensions["crl_distribution_points"]["value"]
     if crl_distribution_points:
-        extensions["crl_ok"] = True
-        extensions["crl_comment"] = "Point(s) de revocation indique(s)."
+        extensions["crl_distribution_points"]["ok"] = True
+        extensions["crl_distribution_points"]["comment"] = "Le certificat indique un ou plusieurs points de révocation CRL"
+        extensions["crl_distribution_points"]["risk"] = "INFO"
     else:
-        extensions["crl_ok"] = None
-        extensions["crl_comment"] = "Aucun point CRL indique."
+        extensions["crl_distribution_points"]["ok"] = None
+        extensions["crl_distribution_points"]["comment"] = "Aucun point de distribution CRL n'est indiqué dans le certificat"
+        extensions["crl_distribution_points"]["risk"] = "LOW"
 
     return extensions
