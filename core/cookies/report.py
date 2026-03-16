@@ -1,4 +1,9 @@
-﻿from __future__ import annotations
+﻿# core/cookies/report.py
+
+# ===============================================================
+# IMPORTS
+# ===============================================================
+from __future__ import annotations
 
 from constants import STATUS_ICON
 from core.reporting import build_report, make_row, make_section_row
