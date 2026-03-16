@@ -10,7 +10,7 @@ from app.controller import WebAnalyzerApp
 # FUNCTION : main
 # ===============================================================
 def main() -> None:
-    """Construit l'application et lance la boucle UI."""
+    """Builds the application and starts the UI loop"""
     app = WebAnalyzerApp()
     app.run()
 
