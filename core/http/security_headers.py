@@ -47,7 +47,7 @@ def _parse_directives(header_value: str) -> dict[str, str]:
     Returns:
         dict[str, str]: Mapping of directives to their values.
     """
-    # Utilise pour CSP et Permissions-Policy, ou la semantique repose sur des directives.
+    # Used for CSP and Permissions-Policy, where semantics rely on directives.
     directives: dict[str, str] = {}
     for part in header_value.split(";"):
         part = part.strip()
@@ -82,6 +82,9 @@ def scan_security_headers(
     def expected(header: str) -> str:
         """ 
         Return expected severity for a missing header
+
+        Returns : 
+            str : expected headers
         """
         return required_headers.get(header, "info")
 

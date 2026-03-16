@@ -1,4 +1,9 @@
-﻿import httpx
+﻿# core/http/scan_http.py
+
+# ===============================================================
+# IMPORTS
+# ===============================================================
+import httpx
 import requests
 
 from constants import HEADER, SECURITY_HEADERS
@@ -14,7 +19,6 @@ from core.http.response_analysis import (
     detect_http_version,
     evaluate_https_posture,
     evaluate_response_time,
-    evaluate_response_time_risk,
     evaluate_status,
 )
 from core.http.result import init_http_result
@@ -25,7 +29,12 @@ from utils.url import normalize_url
 # FUNCTION : scan_http_config
 # ===============================================================
 def scan_http_config(url: str) -> dict:
-    """Pipeline HTTP complet: requete, analyse, enrichissement, puis construction du report."""
+    """
+    Complete HTTP pipeline: request, analysis, enrichment, then report building.
+
+    Returns : 
+        dict : formatted output
+    """
     normalized_url = normalize_url(url)
     result = init_http_result(normalized_url)
     target = result["target"]
@@ -41,8 +50,9 @@ def scan_http_config(url: str) -> dict:
             timeout=5,
             allow_redirects=True,
         )
-
-        # Bloc 1: informations de reponse immediates.
+        
+        
+        # Block 1: immediate response information
         (
             transport["status_code"],
             transport["status_message"],
@@ -67,7 +77,7 @@ def scan_http_config(url: str) -> dict:
         ) = detect_http_version(target["final_url"], httpx)
 
 
-        # Bloc 2: posture HTTPS et impact sur l'interpretation de l'URL finale.
+        # Block 2: HTTPS posture and its impact on final URL interpretation.
         (
             transport["uses_https"],
             transport["https_value"],
@@ -90,10 +100,14 @@ def scan_http_config(url: str) -> dict:
         )
 
         transport["time"] = response.elapsed.total_seconds()
-        transport["time_ok"], transport["time_comment"] = evaluate_response_time(transport["time"])
-        transport["time_risk"] = evaluate_response_time_risk(transport["time"])
+        (
+            transport["time_ok"],
+            transport["time_comment"],
+            transport["time_risk"],
+        ) = evaluate_response_time(transport["time"])
 
-        # Bloc 3: analyse des headers et du contenu HTML.
+        
+        # Block 3: analysis of headers and HTML content.
         content["header_findings"] = scan_security_headers(
             response.headers,
             SECURITY_HEADERS,
@@ -114,7 +128,8 @@ def scan_http_config(url: str) -> dict:
             content["mixed_content_level"],
         )
 
-        # Bloc 4: exposition annexe (redirections, fichiers standards, methodes HTTP).
+
+        # Block 4: additional exposure checks (redirects, standard files, HTTP methods).
         exposure["redirects"] = scan_redirections(response, normalized_url)
         exposure["standard_files"] = scan_standard_files(
             target["final_url"],
@@ -132,6 +147,6 @@ def scan_http_config(url: str) -> dict:
     except Exception as exc:
         result["errors"]["message"] = map_http_scan_error(exc)
 
-    # Le report est toujours construit, meme en cas d'erreur, pour garder un contrat stable cote UI.
+    # The report is always built, even on error, to keep a stable contract for the UI.
     result["report"] = build_http_report(result)
     return result

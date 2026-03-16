@@ -6,18 +6,24 @@
 import ttkbootstrap as ttk
 
 # ===============================================================
+# FUNCTION : clear_table
+# ===============================================================
+def clear_table(table):
+    """
+    Clear all rows from a single result table.
+    """
+    table.delete(*table.get_children())
+
+# ===============================================================
 # FUNCTION : clear_tables
 # ===============================================================
 def clear_tables(http_table,ssl_table,cookies_table):
     """
     Clear all rows from the HTTP, TLS, and Cookies tables.
     """
-    for item in http_table.get_children():
-        http_table.delete(item)
-    for item in ssl_table.get_children():
-        ssl_table.delete(item)
-    for item in cookies_table.get_children():
-        cookies_table.delete(item)
+    clear_table(http_table)
+    clear_table(ssl_table)
+    clear_table(cookies_table)
 
 # ===============================================================
 # FUNCTION : create_result_table
@@ -40,7 +46,7 @@ def create_result_table(parent, title):
     tree.heading("risk", text="Risque")
     tree.heading("comment", text="Commentaire")
     
-    # La colonne commentaire prend l'espace restant, les autres restent stables.
+    # The comment column takes the remaining space while the others stay fixed.
     tree.column("param", width=220, anchor="w", stretch=False)
     tree.column("value", width=200, anchor="w", stretch=False)
     tree.column("check", width=190, anchor="center", stretch=False)

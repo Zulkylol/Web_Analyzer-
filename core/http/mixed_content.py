@@ -17,6 +17,7 @@ from constants import HEADER
 def evaluate_mixed_content_risk(mixed_detected: bool, mixed_level: str) -> str:
     """
     Assess the risk associated with detected mixed content
+
     returns :
         str : risk level 
     """
@@ -49,8 +50,10 @@ def detect_mixed_content(
     if not uses_https:
         return False, [], "Aucun contenu mixte détecté", ""
 
+    # Turns the HTML into a navigable object
     soup = BeautifulSoup(html, "html.parser")
 
+    # List of ressources we check
     tag_attributes = {
         "img": ["src", "srcset"],
         "script": ["src"],
@@ -67,7 +70,7 @@ def detect_mixed_content(
     active_attributes = {("link", "href")}
     has_active_mixed = False
 
-    # Detect HTTP resources in HTML tag attributes.
+    # Detect HTTP resources in HTML tag attributes
     for tag, attributes in tag_attributes.items():
         for element in soup.find_all(tag):
             for attribute in attributes:
@@ -87,13 +90,13 @@ def detect_mixed_content(
                     if tag in active_tags or (tag, attribute) in active_attributes:
                         has_active_mixed = True
 
-    #inline HTTP URLs
+    # Detect HTTP URLs in inline styles
     for element in soup.find_all(style=True):
         css = element.get("style") or ""
         for url in re.findall(r'url\(\s*["\']?(http://[^"\')\s]+)', css):
             mixed.append((url, "inline-style"))
 
-    #inline External CSS
+    # Detect HTTP URLs in external stylesheets
     for link in soup.find_all("link", href=True):
         link_rel = link.get("rel") or []
         if any(str(r).lower() == "stylesheet" for r in link_rel):

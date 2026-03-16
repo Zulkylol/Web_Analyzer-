@@ -1,7 +1,18 @@
+# core/pdf/export_report.py
+
+# ===============================================================
+# IMPORTS
+# ===============================================================
 from __future__ import annotations
 
 from datetime import datetime
 from html import escape
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import mm
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 
 # ===============================================================
@@ -31,12 +42,6 @@ def export_pdf_report(scan_results: dict, filepath: str) -> None:
     Returns :
         None : no return
     """
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4, landscape
-    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-    from reportlab.lib.units import mm
-    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-
     styles = getSampleStyleSheet()
     title_style = styles["Title"]
     title_style.fontName, title_style.fontSize, title_style.leading = "Helvetica-Bold", 22, 26

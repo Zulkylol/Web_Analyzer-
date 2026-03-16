@@ -24,6 +24,7 @@ def analyze_metadata(x509_cert: x509.Certificate) -> dict:
     signature = {"value": "", "ok": True, "comment": "", "risk": "INFO"}
     fingerprint = {"value": "", "comment": "Empreinte SHA-256 du certificat présenté par le serveur", "risk": "INFO"}
 
+    # ----------------------- VERSION ---------------------------
     version["value"] = x509_cert.version.name
     if x509_cert.version.name != "v3":
         version["ok"] = False
@@ -34,6 +35,7 @@ def analyze_metadata(x509_cert: x509.Certificate) -> dict:
         version["comment"] = "Le certificat utilise le format X.509 v3"
         version["risk"] = "INFO"
 
+    # ------------------------ SERIAL ---------------------------
     serial_number = x509_cert.serial_number
     serial_bit_length = serial_number.bit_length()
     serial["value"] = hex(serial_number)
@@ -53,6 +55,7 @@ def analyze_metadata(x509_cert: x509.Certificate) -> dict:
         serial["comment"] = f"Le numéro de série a une longueur correcte ({serial_bit_length} bits)"
         serial["risk"] = "INFO"
 
+    # ----------------------- SIGNATURE -------------------------
     try:
         signature_hash = x509_cert.signature_hash_algorithm.name.lower()
         signature_algorithm = x509_cert.signature_algorithm_oid._name.lower()
@@ -79,7 +82,8 @@ def analyze_metadata(x509_cert: x509.Certificate) -> dict:
         signature["ok"] = None
         signature["comment"] = "Impossible d'analyser l'algorithme de signature du certificat"
         signature["risk"] = "MEDIUM"
-
+    
+    # ---------------------- FINGERPRINT ------------------------
     try:
         fingerprint["value"] = x509_cert.fingerprint(hashes.SHA256()).hex()
     except Exception:

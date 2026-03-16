@@ -3,22 +3,7 @@
 # ===============================================================
 # IMPORTS
 # ===============================================================
-from urllib.parse import urlparse, urlunparse
-
-# ===============================================================
-# FUNCTION : _base_origin
-# ===============================================================
-def _base_origin(url: str) -> str:
-    """
-    Remove path, parameters and query from a URL
-
-    Returns : 
-        str : base URL 
-    """
-    p = urlparse(url or "")
-    if not p.scheme or not p.netloc:
-        return ""  
-    return urlunparse((p.scheme, p.netloc, "", "", "", ""))
+from utils.http import base_origin
 
 # ===============================================================
 # FUNCTION : scan_standard_files
@@ -36,10 +21,11 @@ def scan_standard_files(
         list[dict[str, str]] : list of findings
     """
     findings: list[dict[str, str]] = []
-    origin = _base_origin(final_url)
+    origin = base_origin(final_url)
     if not origin:
         return findings
 
+    # Files we are looking for
     targets = [
         ("/robots.txt", "robots.txt"),
         ("/.well-known/security.txt", "security.txt"),
@@ -56,7 +42,7 @@ def scan_standard_files(
             )
             code = int(getattr(resp, "status_code", 0) or 0)
 
-            #HTTP OK
+            #HTTP OK (200)
             if code == 200:
                 findings.append(
                     {
@@ -68,7 +54,7 @@ def scan_standard_files(
                     }
                 )
 
-            #HTTP UNAUTHORIZED
+            #HTTP UNAUTHORIZED (401, 403)
             elif code in (401, 403):
                 findings.append(
                     {
@@ -135,14 +121,14 @@ def scan_exposed_methods(
             allow_redirects=True,
         )
 
-        #Retrieve the allowed methods
+        # Retrieve the allowed methods
         allow_raw = (
             resp.headers.get("Allow")
             or resp.headers.get("Access-Control-Allow-Methods")
             or ""
         )
 
-        #Normalization
+        # Normalization
         methods = sorted(
             {
                 m.strip().upper()
@@ -151,12 +137,14 @@ def scan_exposed_methods(
             }
         )
 
+        # No exposed methods
         if not methods:
             result["value"] = "Not disclosed"
             result["risk"] = "INFO"
             result["comment"] = "Aucune methode exposee via en-tete Allow"
             return result
 
+        # Risk mapping 
         risky_high = {"TRACE", "CONNECT"}
         risky_medium = {"PUT", "DELETE"}
         risky_low = {"PATCH"}
@@ -165,6 +153,7 @@ def scan_exposed_methods(
         present_medium = sorted(m for m in methods if m in risky_medium)
         present_low = sorted(m for m in methods if m in risky_low)
 
+        # Populate risk and comment
         if present_high:
             result["risk"] = "HIGH"
             result["comment"] = f"Methodes sensibles exposees: {', '.join(present_high)}"

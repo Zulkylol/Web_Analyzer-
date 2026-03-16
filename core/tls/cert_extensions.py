@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from cryptography import x509
+from cryptography.x509.oid import ExtendedKeyUsageOID
 
 
 # ===============================================================
@@ -37,9 +38,17 @@ def analyze_extensions(x509_cert: x509.Certificate) -> dict:
         except Exception:
             pass
 
+    # ------------------- BASIC CONSTRAINTS ---------------------
     basic_constraints = extensions["basic_constraints"]["value"]
+    try:
+        basic_constraints_ca = x509_cert.extensions.get_extension_for_class(
+            x509.BasicConstraints
+        ).value.ca
+    except Exception:
+        basic_constraints_ca = None
+
     if basic_constraints:
-        if "CA=True" in basic_constraints:
+        if basic_constraints_ca is True:
             extensions["basic_constraints"]["ok"] = False
             extensions["basic_constraints"]["comment"] = "Le certificat est marqué comme CA, ce qui est anormal pour un certificat serveur"
             extensions["basic_constraints"]["risk"] = "HIGH"
@@ -52,9 +61,20 @@ def analyze_extensions(x509_cert: x509.Certificate) -> dict:
         extensions["basic_constraints"]["comment"] = "L'extension Basic Constraints est absente du certificat"
         extensions["basic_constraints"]["risk"] = "MEDIUM"
 
+    # ---------------------- EXTENDED KU ------------------------
     extended_key_usage = extensions["extended_key_usage"]["value"]
+    try:
+        extended_key_usage_has_server_auth = (
+            ExtendedKeyUsageOID.SERVER_AUTH
+            in x509_cert.extensions.get_extension_for_class(
+                x509.ExtendedKeyUsage
+            ).value
+        )
+    except Exception:
+        extended_key_usage_has_server_auth = None
+
     if extended_key_usage:
-        if "serverAuth" in extended_key_usage or "TLS Web Server Authentication" in extended_key_usage:
+        if extended_key_usage_has_server_auth is True:
             extensions["extended_key_usage"]["ok"] = True
             extensions["extended_key_usage"]["comment"] = "L'EKU autorise explicitement l'authentification serveur TLS"
             extensions["extended_key_usage"]["risk"] = "INFO"
@@ -67,9 +87,17 @@ def analyze_extensions(x509_cert: x509.Certificate) -> dict:
         extensions["extended_key_usage"]["comment"] = "L'extension Extended Key Usage est absente du certificat"
         extensions["extended_key_usage"]["risk"] = "MEDIUM"
 
+    # ----------------------- KEY USAGE -------------------------
     key_usage = extensions["key_usage"]["value"]
+    try:
+        key_usage_has_digital_signature = x509_cert.extensions.get_extension_for_class(
+            x509.KeyUsage
+        ).value.digital_signature
+    except Exception:
+        key_usage_has_digital_signature = None
+
     if key_usage:
-        if "digital_signature" in key_usage:
+        if key_usage_has_digital_signature is True:
             extensions["key_usage"]["ok"] = True
             extensions["key_usage"]["comment"] = "L'usage digitalSignature est bien présent dans le certificat"
             extensions["key_usage"]["risk"] = "INFO"
@@ -82,6 +110,7 @@ def analyze_extensions(x509_cert: x509.Certificate) -> dict:
         extensions["key_usage"]["comment"] = "L'extension Key Usage est absente du certificat"
         extensions["key_usage"]["risk"] = "MEDIUM"
 
+    # ------------------- CRL DISITRIBUTION ---------------------
     crl_distribution_points = extensions["crl_distribution_points"]["value"]
     if crl_distribution_points:
         extensions["crl_distribution_points"]["ok"] = True

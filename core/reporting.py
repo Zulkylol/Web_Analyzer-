@@ -1,4 +1,9 @@
-﻿from __future__ import annotations
+﻿# core/reporting.py
+
+# ===============================================================
+# IMPORTS
+# ===============================================================
+from __future__ import annotations
 
 from constants import STATUS_ICON
 
@@ -15,7 +20,12 @@ RISK_ORDER = {
 # FUNCTION : normalize_risk
 # ===============================================================
 def normalize_risk(risk: str, default: str = "INFO") -> str:
-    """Normalise les niveaux de risque pour eviter les variantes incoherentes."""
+    """
+    Normalize risk levels to avoid inconsistent variants.
+
+    Returns :
+        str : normalized risk level
+    """
     risk_text = str(risk or "").strip().upper()
     return risk_text if risk_text in RISK_ORDER else default
 
@@ -24,7 +34,12 @@ def normalize_risk(risk: str, default: str = "INFO") -> str:
 # FUNCTION : icon_for_risk
 # ===============================================================
 def icon_for_risk(risk: str, ok_when_info: bool = False) -> str:
-    """Associe un niveau de risque a l'icone affichee dans les tableaux."""
+    """
+    Return the icon associated with a risk level.
+
+    Returns :
+        str : icon key
+    """
     risk_u = normalize_risk(risk)
     if risk_u == "LOW":
         return STATUS_ICON["low"]
@@ -49,7 +64,12 @@ def make_row(
     tags: tuple[str, ...] = (),
     include_in_findings: bool = False,
 ) -> dict:
-    """Construit une ligne standard du report commun partage par HTTP/TLS/Cookies."""
+    """
+    Build a standard report row shared by HTTP, TLS, and Cookies.
+
+    Returns :
+        dict : report row
+    """
     normalized_risk = normalize_risk(risk)
     return {
         "param": param,
@@ -66,7 +86,12 @@ def make_row(
 # FUNCTION : make_section_row
 # ===============================================================
 def make_section_row(title: str) -> dict:
-    """Construit une ligne de separation visuelle entre sections d'un onglet."""
+    """
+    Build a visual separator row between report sections.
+
+    Returns :
+        dict : section row
+    """
     return {
         "param": title,
         "value": "",
@@ -78,12 +103,16 @@ def make_section_row(title: str) -> dict:
         "is_section": True,
     }
 
-
 # ===============================================================
 # FUNCTION : _public_row
 # ===============================================================
 def _public_row(row: dict) -> dict:
-    """Nettoie une ligne interne avant exposition dans le report final."""
+    """
+    Convert an internal row into its public report representation.
+
+    Returns :
+        dict : public row
+    """
     tags = list(row.get("tags", []))
     if row.get("is_section"):
         return {
@@ -117,7 +146,12 @@ def _public_row(row: dict) -> dict:
 # FUNCTION : compute_overall_risk
 # ===============================================================
 def compute_overall_risk(rows: list[dict]) -> str:
-    """Retourne le risque le plus eleve parmi une liste de lignes/findings."""
+    """
+    Return the highest risk level among report rows or findings.
+
+    Returns :
+        str : overall risk level
+    """
     if not rows:
         return "INFO"
     return max((normalize_risk(row.get("risk", "INFO")) for row in rows), key=lambda risk: RISK_ORDER[risk])
@@ -127,7 +161,12 @@ def compute_overall_risk(rows: list[dict]) -> str:
 # FUNCTION : build_report
 # ===============================================================
 def build_report(source: str, rows: list[dict], *, error_message: str = "") -> dict:
-    """Assemble la structure finale lue par l'UI et la synthese globale."""
+    """
+    Build the final report structure consumed by the UI.
+
+    Returns :
+        dict : formatted report
+    """
     public_rows = [_public_row(row) for row in rows]
     findings = [_public_row(row) for row in rows if row.get("include_in_findings")]
     # Les compteurs de synthese globale se basent uniquement sur les findings.

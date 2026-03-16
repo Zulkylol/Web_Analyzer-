@@ -3,36 +3,20 @@
 # ===============================================================
 # IMPORTS
 # ===============================================================
-from typing import Tuple
-from urllib.parse import urlparse
-
-
-# ===============================================================
-# FUNCTION : map_http_version
-# ===============================================================
-def map_http_version(version_number: int) -> Tuple[str, str]:
-    """
-    Map a numeric HTTP version code to its readable name and status.
-
-    Returns:
-        Tuple[str, str]:
-            - Human-readable HTTP version label
-            - Classification/status description
-    """
-    versions = {
-        9: ("HTTP/0.9", "Protocole obsolete et non securise"),
-        10: ("HTTP/1.0", "Version obsolete du protocole"),
-        11: ("HTTP/1.1", "Protocole ancien encore largement repandu"),
-        20: ("HTTP/2", "Version moderne et performante du protocole"),
-    }
-    return versions.get(version_number, (f"Unknown ({version_number})", "Inconnu"))
+import ipaddress
+from urllib.parse import urlparse, urlunparse
 
 
 # ===============================================================
 # FUNCTION : shorten_url
 # ===============================================================
 def shorten_url(url: str, path_limit: int = 28) -> str:
-    """Raccourcit une URL pour la vue table en supprimant les query params trop verbeux."""
+    """
+    Shorten a URL for table display by trimming overly verbose query parameters.
+
+    Returns :
+        str : shortened URL
+    """
     parsed = urlparse(str(url or ""))
     if not parsed.scheme or not parsed.netloc:
         return str(url or "")
@@ -41,6 +25,22 @@ def shorten_url(url: str, path_limit: int = 28) -> str:
     if len(path) > path_limit:
         path = f"{path[:path_limit].rstrip('/')}..."
     return f"{parsed.scheme}://{parsed.netloc}{path}"
+
+
+# ===============================================================
+# FUNCTION : base_origin
+# ===============================================================
+def base_origin(url: str) -> str:
+    """
+    Return the origin part of a URL without path, parameters, or query.
+
+    Returns :
+        str : base origin
+    """
+    parsed = urlparse(url or "")
+    if not parsed.scheme or not parsed.netloc:
+        return ""
+    return urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
 
 
 # ===============================================================
@@ -54,6 +54,31 @@ def normalize_hostname(hostname: str | None) -> str:
         str : normalized hostname
     """
     return (hostname or "").strip().lower().strip(".")
+
+
+# ===============================================================
+# FUNCTION : base_domain
+# ===============================================================
+def base_domain(hostname: str | None) -> str:
+    """
+    Return the base domain of a hostname, or the IP as-is.
+
+    Returns :
+        str : base domain
+    """
+    hostname = normalize_hostname(hostname)
+    if not hostname:
+        return ""
+    try:
+        ipaddress.ip_address(hostname)
+        return hostname
+    except ValueError:
+        pass
+
+    parts = hostname.split(".")
+    if len(parts) >= 2:
+        return ".".join(parts[-2:])
+    return hostname
 
 
 # ===============================================================

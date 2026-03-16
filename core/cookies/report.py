@@ -15,18 +15,9 @@ def build_cookies_report(result: dict) -> dict:
     cookies = result.get("cookies") or []
     total_cookies = int(summary.get("total_cookies", 0) or 0)
     sensitive_cookies = int(summary.get("sensitive_cookies", 0) or 0)
-    error_message = str(result.get("error", "") or "")
+    error_message = str((result.get("errors") or {}).get("message", "") or "")
 
-    # ===============================================================
-    # FUNCTION : add_row
-    # ===============================================================
     def add_row(param, value="", *, risk="INFO", comment="", ok_when_info=False, check=None, tags=(), include=False):
-        """
-        Append a report row.
-
-        Returns :
-            None : no return
-        """
         rows.append(
             make_row(
                 param,
@@ -40,16 +31,7 @@ def build_cookies_report(result: dict) -> dict:
             )
         )
 
-    # ===============================================================
-    # FUNCTION : add_section
-    # ===============================================================
     def add_section(title: str):
-        """
-        Append a section row.
-
-        Returns :
-            None : no return
-        """
         rows.append(make_section_row(title))
 
     if error_message:

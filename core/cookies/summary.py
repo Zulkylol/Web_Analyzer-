@@ -1,24 +1,7 @@
 ﻿from __future__ import annotations
 
-from core.cookies.policy import SEV_RANK, cookie_sensitivity_flags
-
-
-# ===============================================================
-# FUNCTION : max_severity
-# ===============================================================
-def max_severity(findings: list[dict]) -> str:
-    """
-    Get the highest finding severity.
-
-    Returns :
-        str : max severity
-    """
-    if not findings:
-        return "info"
-    return max(
-        (str(finding.get("severity", "info")).lower() for finding in findings),
-        key=lambda severity: SEV_RANK.get(severity, -1),
-    )
+from constants import SEV_RANK
+from core.cookies.policy import cookie_sensitivity_flags, max_severity
 
 
 # ===============================================================

@@ -1,4 +1,9 @@
-﻿from __future__ import annotations
+﻿# core/cookies/scan_cookies.py
+
+# ===============================================================
+# IMPORTS
+# ===============================================================
+from __future__ import annotations
 
 import requests
 
@@ -71,11 +76,9 @@ def scan_cookies_config(url: str) -> dict:
             else "Analyse cookies terminee"
         )
     except requests.exceptions.RequestException as exc:
-        result["error"] = f"Cookie scan request failed: {exc}"
-        result["errors"]["message"] = result["error"]
+        result["errors"]["message"] = f"Cookie scan request failed: {exc}"
     except Exception as exc:
-        result["error"] = f"Cookie scan failed: {exc}"
-        result["errors"]["message"] = result["error"]
+        result["errors"]["message"] = f"Cookie scan failed: {exc}"
 
     # Comme pour HTTP/TLS, l'UI consomme uniquement le report final harmonise.
     result["report"] = build_cookies_report(result)

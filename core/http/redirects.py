@@ -3,35 +3,11 @@
 # ===============================================================
 # IMPORTS
 # ===============================================================
-import ipaddress
 from urllib.parse import urlparse, urljoin
 
-from utils.http import is_apex_www_pair, normalize_hostname, shorten_url
+import ipaddress
 
-
-# ===============================================================
-# FUNCTION : _base_domain
-# ===============================================================
-def _base_domain(hostname: str | None) -> str:
-    """
-    Extract the base domain from a hostname.
-
-    Returns:
-        str: Base domain.
-    """
-    hostname = normalize_hostname(hostname)
-    if not hostname:
-        return ""
-    try:
-        ipaddress.ip_address(hostname)
-        return hostname
-    except ValueError:
-        pass
-
-    parts = hostname.split(".")
-    if len(parts) >= 2:
-        return ".".join(parts[-2:])
-    return hostname
+from utils.http import base_domain, is_apex_www_pair, normalize_hostname, shorten_url
 
 
 # ===============================================================
@@ -59,11 +35,7 @@ def scan_redirections(response, original_url: str) -> dict:
     }
 
     # ----------- STORE REDIRECT DOMAINS/IPS ----------------
-    # Chaque saut est analyse pour produire:
-    # - une vue courte de la chaine
-    # - des findings eventuels sur les domaines traverses
-    # - un indicateur d'IP brute si necessaire
-
+    # Analyze each hop for chain display, domain findings, and raw IPs
 
     try:
         if not history:
@@ -71,7 +43,7 @@ def scan_redirections(response, original_url: str) -> dict:
             return result
 
         initial_domain = urlparse(original_url).hostname
-        initial_base_domain = _base_domain(initial_domain)
+        initial_base_domain = base_domain(initial_domain)
 
         for resp in history:
             loc = resp.headers.get("Location")
@@ -95,13 +67,13 @@ def scan_redirections(response, original_url: str) -> dict:
         normalized_initial = normalize_hostname(initial_domain)
 
         for domain in result["redirect_domains"]:
-            base_domain = _base_domain(domain)
+            domain_base = base_domain(domain)
             normalized_domain = normalize_hostname(domain)
 
             if domain in result["redirect_ips"]:
                 risk = "HIGH"
                 comment = "Redirection vers IP brute (pas de nom de domaine)"
-            elif base_domain == initial_base_domain:
+            elif domain_base == initial_base_domain:
                 if normalized_domain == normalized_initial:
                     risk = "INFO"
                     comment = ""

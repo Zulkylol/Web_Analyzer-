@@ -15,7 +15,6 @@ def init_cookies_result() -> dict:
             "max_severity": "info",
             "comment": "",
         },
-        "error": "",
         "errors": {"message": ""},
         "report": {},
     }

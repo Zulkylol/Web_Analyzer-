@@ -8,7 +8,12 @@ from core.reporting import build_report, icon_for_risk, make_row, make_section_r
 # FUNCTION : build_http_report
 # ===============================================================
 def build_http_report(result: dict) -> dict:
-    """Transforme le resultat HTTP brut en lignes ordonnees pour l'UI."""
+    """
+    Transforms the raw HTTP result into ordered rows for the UI.
+
+    Returns :
+        dict : report
+    """
     rows: list[dict] = []
     target = result.get("target") or {}
     transport = result.get("transport") or {}
@@ -18,16 +23,7 @@ def build_http_report(result: dict) -> dict:
     mixed_urls = content.get("mixed_url") or []
     error_message = str((result.get("errors") or {}).get("message", "") or "")
 
-    # ===============================================================
-    # FUNCTION : add_row
-    # ===============================================================
     def add_row(param, value="", *, risk="INFO", comment="", ok_when_info=False, check=None, tags=(), include=False):
-        """
-        Append a report row.
-
-        Returns :
-            None : no return
-        """
         rows.append(
             make_row(
                 param,
@@ -41,16 +37,7 @@ def build_http_report(result: dict) -> dict:
             )
         )
 
-    # ===============================================================
-    # FUNCTION : add_section
-    # ===============================================================
     def add_section(title: str):
-        """
-        Append a section row.
-
-        Returns :
-            None : no return
-        """
         rows.append(make_section_row(title))
 
     if error_message:
@@ -64,7 +51,8 @@ def build_http_report(result: dict) -> dict:
         )
         return build_report("HTTP", rows, error_message=error_message)
 
-    # Section 1: cible initiale, transport final et metriques de base.
+    # --------------- CIBLE ET TRANSPORT -------------------
+    # Section 1: initial target, final transport, and basic metrics.
     add_section("Cible et transport")
     add_row("URL saisie", target.get("original_url", ""), comment="URL normalisee utilisee pour le scan")
 
@@ -138,7 +126,8 @@ def build_http_report(result: dict) -> dict:
         include=str(time_risk).upper() != "INFO",
     )
 
-    # Section 2: comportement de redirection entre l'URL saisie et la cible finale.
+    # ------------------ REDIRECTIONS ----------------------
+    # Section 2: number of redirections, findings, redirect chain
     add_section("Redirections")
     redirect_error = str(redirects.get("error", "") or "")
     if redirect_error:
@@ -198,7 +187,8 @@ def build_http_report(result: dict) -> dict:
                 comment = str(hop)
             add_row("Chaine de redirections" if index == 1 else "", str(hop_status), comment=comment)
 
-    # Section 3: securite du contenu recu et des headers de protection.
+    # --------------- SECURITE DE CONTENU ------------------
+    # Section 3: security of the received content and protective headers.
     if uses_https or content.get("header_findings"):
         add_section("Securite de contenu / headers")
 
@@ -247,7 +237,8 @@ def build_http_report(result: dict) -> dict:
             if finding.get("recommendation"):
                 add_row("", "", comment="âž© Recommandation: "+finding["recommendation"], check="", tags=("recommendation",))
 
-    # Section 4: surface d'exposition annexe autour de la cible HTTP.
+    # -------------------- EXPOSITION ----------------------
+    # Section 4: additional exposure surface around the HTTP target.
     add_section("Exposition")
     standard_files = exposure.get("standard_files") or []
     if standard_files:
@@ -283,4 +274,5 @@ def build_http_report(result: dict) -> dict:
         include=methods_risk != "INFO",
     )
 
+    # Build final report with all rows
     return build_report("HTTP", rows, error_message=error_message)

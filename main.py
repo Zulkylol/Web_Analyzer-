@@ -1,7 +1,10 @@
-"""Point d'entree minimal de l'application desktop."""
+﻿# main.py
+
+# ===============================================================
+# IMPORTS
+# ===============================================================
 
 from app.controller import WebAnalyzerApp
-
 
 # ===============================================================
 # FUNCTION : main

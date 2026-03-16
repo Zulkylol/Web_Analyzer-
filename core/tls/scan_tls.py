@@ -1,4 +1,9 @@
-﻿from __future__ import annotations
+﻿# core/tls/scan_tls.py
+
+# ===============================================================
+# IMPORTS
+# ===============================================================
+from __future__ import annotations
 
 from core.tls.cert_extensions import analyze_extensions
 from core.tls.cert_identity import analyze_identity
@@ -16,7 +21,12 @@ from utils.tls import fetch_tls_artifacts, load_x509_certificate, prepare_tls_ta
 # FUNCTION : scan_tls_config
 # ===============================================================
 def scan_tls_config(url: str) -> dict:
-    """Pipeline TLS complet: handshake, parsing X509, analyses directes, puis report."""
+    """
+    Complete TLS pipeline: handshake, X.509 parsing, direct analysis, then report generation.
+
+    Returns : 
+        dict : populated result
+    """
     normalized_url, hostname, port, hostname_for_match = prepare_tls_target(url)
     result = init_tls_result()
     identity = result["identity"]
@@ -29,7 +39,8 @@ def scan_tls_config(url: str) -> dict:
         if artifacts.error:
             result["errors"]["message"] = artifacts.error
         else:
-            # Bloc 1: informations immediates de session TLS.
+
+            # Block 1: immediate TLS session information.
             protocol["version"]["value"] = artifacts.negotiated_version
             if artifacts.cipher_tuple:
                 name, _, bits = artifacts.cipher_tuple
@@ -39,7 +50,7 @@ def scan_tls_config(url: str) -> dict:
 
             x509_cert = load_x509_certificate(artifacts.der_cert)
 
-            # Bloc 2: identite, confiance et metadonnees du certificat.
+            # Block 2: certificate identity, trust, and metadata.
             identity.update(analyze_identity(x509_cert, hostname_for_match))
 
             (
@@ -60,7 +71,7 @@ def scan_tls_config(url: str) -> dict:
             certificate["public_key"] = analyze_public_key(x509_cert)
             certificate["extensions"] = analyze_extensions(x509_cert)
 
-            # Bloc 3: protocole, politique TLS et ciphers.
+            # Block 3: protocol, TLS policy, and ciphers.
             (
                 protocol["version"],
                 protocol["supported_versions"],
@@ -83,6 +94,6 @@ def scan_tls_config(url: str) -> dict:
     except Exception as exc:
         result["errors"]["message"] = f"Erreur TLS : {exc}"
 
-    # Le report est toujours construit pour garder un contrat stable cote UI.
+    # The report is always built to keep a stable contract for the UI.
     result["report"] = build_tls_report(result)
     return result

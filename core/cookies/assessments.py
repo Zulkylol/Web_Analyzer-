@@ -1,6 +1,12 @@
-﻿from __future__ import annotations
+﻿# core/cookies/assessments.py
 
-from core.cookies.policy import SEV_RANK, cookie_sensitivity_flags
+# ===============================================================
+# IMPORTS
+# ===============================================================
+from __future__ import annotations
+
+from constants import SEV_RANK
+from core.cookies.policy import cookie_sensitivity_flags, max_severity
 
 
 # ===============================================================
@@ -37,19 +43,6 @@ def select_finding(findings: list[dict], categories: tuple[str, ...]) -> dict | 
     if not matches:
         return None
     return max(matches, key=lambda finding: SEV_RANK.get(str(finding.get("severity", "info")).lower(), -1))
-
-
-# ===============================================================
-# FUNCTION : max_severity
-# ===============================================================
-def max_severity(findings: list[dict]) -> str:
-    """Retourne la severite maximale d'une liste de findings cookies."""
-    if not findings:
-        return "info"
-    return max(
-        (str(finding.get("severity", "info")).lower() for finding in findings),
-        key=lambda severity: SEV_RANK.get(severity, -1),
-    )
 
 
 # ===============================================================

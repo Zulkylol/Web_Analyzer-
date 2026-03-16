@@ -33,6 +33,7 @@ def evaluate_status(response) -> tuple[int, str, bool | None]:
 
     return status_code, status_message, status_ok
 
+
 # ===============================================================
 # FUNCTION : detect_http_version
 # ===============================================================
@@ -220,6 +221,9 @@ def adjust_url_risk_with_https_posture(
 ) -> tuple[str, str]:
     """
     Adjust URL risk when requests sees HTTP but HTTPS is available.
+
+    Returns:
+        tuple[str,str] : adjusted risk + adjusted comment
     """
     adjusted_risk = url_risk
     adjusted_comment = url_comment or ""
@@ -240,35 +244,19 @@ def adjust_url_risk_with_https_posture(
 # ===============================================================
 # FUNCTION : evaluate_response_time
 # ===============================================================
-def evaluate_response_time(seconds: float) -> tuple[bool | None, str]:
+def evaluate_response_time(seconds: float) -> tuple[bool | None, str, str]:
     """
-    Classify the response time performance.
+    Classify response time and associated risk.
 
     Returns:
-        tuple[bool | None, str]:
-            (time_ok, comment)
+        tuple[bool | None, str, str]:
+            (time_ok, comment, risk)
     """
 
     if seconds < 0.8:
-        return True, "Temps de réponse rapide"
-    elif seconds < 2:
-        return True, "Temps correct"
-    elif seconds < 5:
-        return None, "Temps de réponse lent"
-    else:
-        return False, "Très lent ou proche timeout"
-
-# ===============================================================
-# FUNCTION : evaluate_response_time_risk
-# ===============================================================
-def evaluate_response_time_risk(seconds: float) -> str:
-    """
-    Risk policy for response time.
-    """
-    if seconds < 0.8:
-        return "INFO"
+        return True, "Temps de réponse rapide", "INFO"
     if seconds < 2:
-        return "LOW"
+        return True, "Temps correct", "LOW"
     if seconds < 5:
-        return "MEDIUM"
-    return "HIGH"
+        return None, "Temps de réponse lent", "MEDIUM"
+    return False, "Très lent ou proche timeout", "HIGH"

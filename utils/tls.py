@@ -107,7 +107,12 @@ def server_accepts_cipher(hostname, port, tls_version, cipher_string):
 # FUNCTION : prepare_tls_target
 # ===============================================================
 def prepare_tls_target(url: str) -> tuple[str, str, int, str]:
-    """Normalise l'URL et extrait les parametres reseau utiles au scan TLS."""
+    """
+    Normalize the URL and extract the network parameters needed for the TLS scan.
+
+    Returns :
+        tuple[str, str, int, str] : normalized URL, hostname, port, and hostname for matching
+    """
     normalized_url = normalize_url(url)
     parsed = urlparse(normalized_url)
     hostname = (parsed.hostname or "").lower().strip() or normalized_url
@@ -118,7 +123,12 @@ def prepare_tls_target(url: str) -> tuple[str, str, int, str]:
 
 @dataclass
 class TLSArtifacts:
-    """Paquet technique brut recupere pendant le handshake TLS."""
+    """
+    Store raw technical artifacts collected during the TLS handshake.
+
+    Returns :
+        None : no return
+    """
     der_cert: Optional[bytes]
     negotiated_version: str
     cipher_tuple: Optional[Tuple[str, str, int]]
@@ -129,7 +139,12 @@ class TLSArtifacts:
 # FUNCTION : load_x509_certificate
 # ===============================================================
 def load_x509_certificate(der_cert: bytes) -> x509.Certificate:
-    """Convertit le certificat DER brut en objet X509 exploitable par `cryptography`."""
+    """
+    Convert a raw DER certificate into an X509 object usable by `cryptography`.
+
+    Returns :
+        x509.Certificate : parsed X509 certificate
+    """
     return x509.load_der_x509_certificate(der_cert, default_backend())
 
 # ===============================================================

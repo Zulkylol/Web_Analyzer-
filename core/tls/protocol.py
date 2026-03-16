@@ -20,6 +20,8 @@ def analyze_tls_versions_and_policy(version_value: str, url: str) -> tuple[dict,
     Returns :
         tuple[dict, dict, dict] : version row, supported versions, policy row
     """
+    
+    # ----------------------- ACTUAL VERSION ---------------------------
     version = {"value": version_value, "ok": None, "comment": "", "risk": "MEDIUM"}
 
     if version_value == "TLSv1":
@@ -43,6 +45,8 @@ def analyze_tls_versions_and_policy(version_value: str, url: str) -> tuple[dict,
         version["comment"] = "La version TLS négociée est inconnue ou n'a pas pu être analysée"
         version["risk"] = "MEDIUM"
 
+    
+    # --------------------- SUPPORTED VERSIONS -------------------------
     supported_versions = {}
     for tls_name, tls_version in [
         ("TLS1.0", ssl.TLSVersion.TLSv1),
@@ -75,6 +79,7 @@ def analyze_tls_versions_and_policy(version_value: str, url: str) -> tuple[dict,
             "risk": risk,
         }
 
+    # ----------------------- VERSION POLICY ---------------------------
     if supported_versions["TLS1.0"]["supported"] or supported_versions["TLS1.1"]["supported"]:
         disabled_legacy_versions = []
         if supported_versions["TLS1.0"]["supported"]:

@@ -1,3 +1,8 @@
+# core/tls/report.py
+
+# ===============================================================
+# IMPORTS
+# ===============================================================
 from __future__ import annotations
 
 from constants import STATUS_ICON
@@ -16,16 +21,7 @@ def build_tls_report(result: dict) -> dict:
     protocol = result.get("protocol", {}) or {}
     error_message = str((result.get("errors") or {}).get("message", "") or "")
 
-    # ===============================================================
-    # FUNCTION : add_row
-    # ===============================================================
     def add_row(param, value="", *, risk="INFO", comment="", ok_when_info=False, check=None, tags=(), include=False):
-        """
-        Append a report row.
-
-        Returns :
-            None : no return
-        """
         rows.append(
             make_row(
                 param,
@@ -39,23 +35,15 @@ def build_tls_report(result: dict) -> dict:
             )
         )
 
-    # ===============================================================
-    # FUNCTION : add_section
-    # ===============================================================
     def add_section(title: str):
-        """
-        Append a section row.
-
-        Returns :
-            None : no return
-        """
         rows.append(make_section_row(title))
 
     if error_message:
         add_row("Erreur TLS", "-", risk="HIGH", comment=error_message, check=STATUS_ICON["high"], include=True)
         return build_report("SSL/TLS", rows, error_message=error_message)
 
-    # Section 1: identite du certificat presentee par le serveur.
+    # -------------- IDENTITE DU CERTIFICAT ------------------
+    # Section 1: certificate identity presented by the server.
     add_section("Identite du certificat")
     add_row(
         "Nom",
@@ -94,7 +82,8 @@ def build_tls_report(result: dict) -> dict:
         comment=identity.get("san_warning", ""),
     )
 
-    # Section 2: confiance de la chaine et statut autosigne.
+    # ----------------- CONFIANCE DU CA ----------------------
+    # Section 2: chain trust and self-signed status.
     add_section("Confiance")
     add_row(
         "Autorite certifiante",
@@ -113,7 +102,8 @@ def build_tls_report(result: dict) -> dict:
         include=str(trust.get("self_signed_risk", "INFO")).upper() != "INFO",
     )
 
-    # Section 3: metadonnees generales du certificat.
+    # -------------------- METADONNES ------------------------
+    # Section 3: general certificate metadata.
     add_section("Metadonnees du certificat")
     valid_from = certificate.get("valid_from", {}) or {}
     add_row(
@@ -182,7 +172,8 @@ def build_tls_report(result: dict) -> dict:
         include=str(public_key.get("risk", "INFO")).upper() != "INFO",
     )
 
-    # Section 4: extensions X509 utilisees pour l'usage du certificat.
+    # ------------------ CERT EXTENSIONS ---------------------
+    # Section 4: X.509 extensions used for certificate usage.
     add_section("Extensions du certificat")
     extensions = certificate.get("extensions", {}) or {}
 
@@ -226,7 +217,8 @@ def build_tls_report(result: dict) -> dict:
         include=str(crl_distribution_points.get("risk", "INFO")).upper() != "INFO",
     )
 
-    # Section 5: versions TLS, politique et chiffrement negocie.
+    # --------------------- PROTOCOL -------------------------
+    # Section 5: TLS versions, policy, and negotiated cipher.
     add_section("Protocole et chiffrement")
     tls_version = protocol.get("version", {}) or {}
     add_row(

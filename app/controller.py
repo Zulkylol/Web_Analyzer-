@@ -1,3 +1,8 @@
+# app/controller.py
+
+# ===============================================================
+# IMPORTS
+# ===============================================================
 import os
 import threading
 import time
@@ -7,16 +12,15 @@ from tkinter import filedialog, messagebox
 
 from core.cookies.scan_cookies import scan_cookies_config
 from core.http.scan_http import scan_http_config
-from core.pdf.export_report import export_pdf_report
 from core.reporting import make_section_row
 from core.tls.scan_tls import scan_tls_config
 from ui.app_window import build_main_window
 from ui.display_common import display_report_rows
-from ui.tables import clear_tables
+from ui.tables import clear_table, clear_tables
 
 
 class WebAnalyzerApp:
-    """Controleur principal: relie l'interface, les scans et la synthese globale."""
+    """Main controller: connects the UI, scans, and overall summary."""
 
     # ===============================================================
     # FUNCTION : __init__
@@ -77,19 +81,12 @@ class WebAnalyzerApp:
         self.root.mainloop()
 
     # ===============================================================
-    # FUNCTION : clear_tree
-    # ===============================================================
-    def clear_tree(self, tree) -> None:
-        """Delete all the lines of a table"""
-        tree.delete(*tree.get_children())
-
-    # ===============================================================
     # FUNCTION : launch_scan
     # ===============================================================
     def launch_scan(self) -> None:
         """Prepare l'UI, normalise l'URL d'entree et demarre le scan hors thread UI."""
         clear_tables(self.http_table, self.ssl_table, self.cookies_table)
-        self.clear_tree(self.summary_table)
+        clear_table(self.summary_table)
         self.scan_results = {
             "HTTP": None,
             "SSL/TLS": None,
@@ -313,6 +310,7 @@ class WebAnalyzerApp:
             return
 
         try:
+            from core.pdf.export_report import export_pdf_report
             export_pdf_report(self.scan_results, filepath)
         except ModuleNotFoundError as exc:
             if exc.name == "reportlab":
@@ -354,7 +352,7 @@ class WebAnalyzerApp:
     # ===============================================================
     def refresh_summary_table(self) -> None:
         """Consolide les findings des trois modules dans la table globale."""
-        self.clear_tree(self.summary_table)
+        clear_table(self.summary_table)
         summary_rows = []
         section_titles = {
             "HTTP": "HTTP",
@@ -433,12 +431,13 @@ class WebAnalyzerApp:
 
         self.details_text.config(state="normal")
         self.details_text.delete("1.0", "end")
-        self.details_text.insert(
-            "end",
-            f"Parametre: {param}\n"
-            f"Valeur: {value}\n"
-            f"Check: {check}\n"
-            f"Risque: {risk}\n"
-            f"Commentaire: {comment}",
-        )
+        for label, content in (
+            ("Param\u00e8tre: ", param),
+            ("Valeur: ", value),
+            ("\u00c9tat: ", check),
+            ("Risque: ", risk),
+            ("Commentaire: ", comment),
+        ):
+            self.details_text.insert("end", label, ("detail_label",))
+            self.details_text.insert("end", f"{content}\n")
         self.details_text.config(state="disabled")

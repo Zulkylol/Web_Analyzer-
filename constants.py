@@ -1,5 +1,7 @@
 # constants.py
 
+import re
+
 SECURITY_HEADERS = {
     "Strict-Transport-Security": "medium",
     "Content-Security-Policy": "high",
@@ -8,6 +10,30 @@ SECURITY_HEADERS = {
     "Referrer-Policy": "low",
     "Permissions-Policy": "low",
 }
+
+HIGHLY_SENSITIVE_COOKIE_NAMES = {
+    "sessionid",
+    "phpsessid",
+    "jsessionid",
+    "connect.sid",
+    "sid",
+    "auth",
+    "authorization",
+    "access_token",
+    "refresh_token",
+    "jwt",
+    "csrf_token",
+    "xsrf-token",
+    "__host-session",
+    "__secure-session",
+}
+
+MAYBE_SENSITIVE_COOKIE_RE = re.compile(
+    r"(^|[_\-.])(session|sess|auth|token|jwt|csrf|xsrf|sid)($|[_\-.])",
+    re.IGNORECASE,
+)
+
+SEV_RANK = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
 
 HEADER = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
