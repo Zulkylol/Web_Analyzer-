@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import ssl
 
+from constants import SUPPORTED_TLS_VERSIONS, WEAK_CIPHER_TESTS, WEAK_TLS_ALGORITHMS
 from utils.tls import server_accepts_cipher, server_supports_tls_version
 
 
@@ -48,12 +49,7 @@ def analyze_tls_versions_and_policy(version_value: str, url: str) -> tuple[dict,
     
     # --------------------- SUPPORTED VERSIONS -------------------------
     supported_versions = {}
-    for tls_name, tls_version in [
-        ("TLS1.0", ssl.TLSVersion.TLSv1),
-        ("TLS1.1", ssl.TLSVersion.TLSv1_1),
-        ("TLS1.2", ssl.TLSVersion.TLSv1_2),
-        ("TLS1.3", ssl.TLSVersion.TLSv1_3),
-    ]:
+    for tls_name, tls_version in SUPPORTED_TLS_VERSIONS:
         supported = server_supports_tls_version(url, tls_version)
         if tls_name in {"TLS1.0", "TLS1.1"}:
             comment = (
@@ -143,8 +139,7 @@ def analyze_cipher_and_weak_ciphers(
         "bits_risk": "HIGH" if (cipher_bits or 0) < 128 else "INFO",
     }
 
-    weak_algorithms = ["RC4", "3DES", "DES", "MD5"]
-    if any(algorithm in cipher_name for algorithm in weak_algorithms):
+    if any(algorithm in cipher_name for algorithm in WEAK_TLS_ALGORITHMS):
         cipher["ok"] = False
         cipher["comment"] = "Une suite cryptographique faible a été détectée (RC4/3DES/DES/MD5)"
         cipher["risk"] = "HIGH"
@@ -177,15 +172,8 @@ def analyze_cipher_and_weak_ciphers(
             },
         )
 
-    weak_cipher_tests = {
-        "3DES": "DES-CBC3-SHA",
-        "AES-CBC": "AES128-SHA:AES256-SHA",
-        "RC4": "RC4-SHA",
-        "MD5": "RSA-MD5",
-    }
-
     weak_cipher_support = {}
-    for weak_name, cipher_string in weak_cipher_tests.items():
+    for weak_name, cipher_string in WEAK_CIPHER_TESTS.items():
         weak_cipher_support[weak_name] = server_accepts_cipher(
             hostname,
             port,

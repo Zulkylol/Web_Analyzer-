@@ -5,15 +5,7 @@
 # ===============================================================
 from __future__ import annotations
 
-from constants import STATUS_ICON
-
-RISK_ORDER = {
-    "INFO": 0,
-    "LOW": 1,
-    "MEDIUM": 2,
-    "HIGH": 3,
-    "CRITICAL": 4,
-}
+from constants import RISK_ORDER, STATUS_ICON
 
 
 # ===============================================================
