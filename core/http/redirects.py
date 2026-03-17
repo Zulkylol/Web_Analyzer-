@@ -15,10 +15,10 @@ from utils.http import base_domain, is_apex_www_pair, normalize_hostname, shorte
 # ===============================================================
 def scan_redirections(response, original_url: str) -> dict:
     """
-    Checks the redirects performed by the web server
+    Analyze the redirects performed by the web server.
 
-    Returns:
-        dict : dictionary that stores the analysis results of redirections
+    Returns :
+        dict : redirect analysis results
     """
     # ------------------ INITIALIZATION ---------------------
     history = response.history or []

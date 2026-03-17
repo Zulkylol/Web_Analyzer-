@@ -5,11 +5,10 @@
 # ===============================================================
 def init_http_result(normalized_url: str) -> dict:
     """
-    Initialize and return the default result dictionary used for HTTP security analysis.
+    Initialize the default result dictionary used for HTTP analysis.
 
-    Returns:
-        dict: A pre-structured dictionary containing all fields required
-            for the HTTP analysis workflow, initialized with default values.
+    Returns :
+        dict : default HTTP result structure
     """
 
     # La structure HTTP reste plus simple que TLS, mais elle est organisee par grands blocs.

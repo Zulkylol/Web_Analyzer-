@@ -13,7 +13,12 @@ from core.reporting import build_report, make_row, make_section_row
 # FUNCTION : build_tls_report
 # ===============================================================
 def build_tls_report(result: dict) -> dict:
-    """Transform the raw TLS result into ordered UI rows."""
+    """
+    Transform the raw TLS result into ordered UI rows.
+
+    Returns :
+        dict : formatted report
+    """
     rows: list[dict] = []
     identity = result.get("identity", {}) or {}
     trust = result.get("trust", {}) or {}

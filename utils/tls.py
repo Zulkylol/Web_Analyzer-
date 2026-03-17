@@ -25,8 +25,8 @@ def is_chain_trusted_by_mozilla(url: str, timeout=5) -> tuple[bool, str]:
     """
     Verify if a server's TLS certificate chain is trusted (Mozilla CA bundle).
 
-    Returns:
-        (is_trusted, tls_version_or_error)
+    Returns :
+        tuple[bool, str] : trust status and TLS version or error message
     """
     parsed = urlparse(url)
     hostname = parsed.hostname or url
@@ -54,8 +54,8 @@ def server_supports_tls_version(url: str, tls_version: ssl.TLSVersion, timeout=5
     """
     Test whether a server supports a specific TLS version by attempting a handshake.
 
-    Returns:
-        bool: True if the TLS handshake succeeds with the specified version, otherwise False.
+    Returns :
+        bool : whether the handshake succeeds for the requested TLS version
     """
     parsed = urlparse(url)
     hostname = parsed.hostname or url
@@ -82,8 +82,8 @@ def server_accepts_cipher(hostname, port, tls_version, cipher_string):
     """
     Check whether a server accepts a specific cipher suite for a given TLS version.
 
-    Returns:
-        bool: True if the handshake succeeds with the specified cipher, otherwise False.
+    Returns :
+        bool : whether the handshake succeeds for the requested cipher
     """
     try:
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
@@ -127,7 +127,7 @@ class TLSArtifacts:
     Store raw technical artifacts collected during the TLS handshake.
 
     Returns :
-        None : no return
+        TLSArtifacts : handshake artifact container
     """
     der_cert: Optional[bytes]
     negotiated_version: str
@@ -154,16 +154,8 @@ def fetch_tls_artifacts(hostname: str, port: int, timeout: int = 5) -> TLSArtifa
     """
     Connect to a server over TLS and retrieve its certificate and session details.
 
-    Returns DER certificate, negotiated TLS version, and cipher suite,
-    or an error inside a TLSArtifacts object.
-
-    Args:
-        hostname (str): Target host.
-        port (int): Target port.
-        timeout (int): Connection timeout (seconds).
-
-    Returns:
-        TLSArtifacts
+    Returns :
+        TLSArtifacts : handshake artifacts or an embedded error
     """
     der_cert = None
     negotiated_version = ""

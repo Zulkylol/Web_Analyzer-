@@ -13,7 +13,12 @@ from core.reporting import build_report, make_row, make_section_row
 # FUNCTION : build_cookies_report
 # ===============================================================
 def build_cookies_report(result: dict) -> dict:
-    """Transforme le resultat cookies brut en lignes ordonnees pour l'UI."""
+    """
+    Transform the raw cookie result into ordered UI rows.
+
+    Returns :
+        dict : formatted report
+    """
     rows: list[dict] = []
     summary = result.get("summary") or {}
     findings = result.get("findings") or []

@@ -7,8 +7,8 @@ def init_tls_result() -> dict:
     """
     Initialize the default result dictionary for TLS analysis.
 
-    Returns:
-        dict: Default TLS result structure.
+    Returns :
+        dict : default TLS result structure
     """
 
     result = {

@@ -32,7 +32,7 @@ def scan_http_config(url: str) -> dict:
     """
     Complete HTTP pipeline: request, analysis, enrichment, then report building.
 
-    Returns : 
+    Returns :
         dict : formatted output
     """
     normalized_url = normalize_url(url)

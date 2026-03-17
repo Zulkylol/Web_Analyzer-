@@ -14,7 +14,7 @@ def map_http_scan_error(exc: Exception) -> str:
     """
     Convert request exceptions into a readable HTTP scan error message.
 
-    Returns : 
+    Returns :
         str : readable error
     """
     if isinstance(exc, requests.exceptions.SSLError):

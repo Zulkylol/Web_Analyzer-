@@ -16,10 +16,10 @@ from constants import HEADER
 # ===============================================================
 def evaluate_mixed_content_risk(mixed_detected: bool, mixed_level: str) -> str:
     """
-    Assess the risk associated with detected mixed content
+    Assess the risk associated with detected mixed content.
 
-    returns :
-        str : risk level 
+    Returns :
+        str : risk level
     """
     level = str(mixed_level or "").lower()
     if level == "active":
@@ -40,12 +40,8 @@ def detect_mixed_content(
     """
     Detect HTTP (mixed) resources in an HTTPS page.
 
-    Returns:
-        tuple[bool, list[tuple[str, str]], str, str]:
-            - whether mixed content was detected
-            - list of (resource_url, location)
-            - summary message
-            - mixed level: active / passive / ""
+    Returns :
+        tuple[bool, list[tuple[str, str]], str, str] : detection flag, resource list, summary, and mixed content level
     """
     if not uses_https:
         return False, [], "Aucun contenu mixte détecté", ""

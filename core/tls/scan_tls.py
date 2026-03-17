@@ -24,7 +24,7 @@ def scan_tls_config(url: str) -> dict:
     """
     Complete TLS pipeline: handshake, X.509 parsing, direct analysis, then report generation.
 
-    Returns : 
+    Returns :
         dict : populated result
     """
     normalized_url, hostname, port, hostname_for_match = prepare_tls_target(url)

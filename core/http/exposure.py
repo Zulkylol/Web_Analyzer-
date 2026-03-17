@@ -16,8 +16,8 @@ def scan_standard_files(
 ) -> list[dict[str, str]]:
     """
     Check whether standard files (robots.txt and security.txt) are present and accessible.
-    
-    Returns : 
+
+    Returns :
         list[dict[str, str]] : list of findings
     """
     findings: list[dict[str, str]] = []
@@ -101,7 +101,7 @@ def scan_exposed_methods(
     Detect exposed HTTP methods and classify the associated risk.
 
     Returns :
-        dict : exposed methods with associated risk
+        dict : exposed methods with the associated risk
     """
     result = {
         "value": "Unknown",

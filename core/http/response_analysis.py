@@ -16,9 +16,8 @@ def evaluate_status(response) -> tuple[int, str, bool | None]:
     """
     Evaluate the HTTP status code and classify it.
 
-    Returns:
-        tuple[int, str, bool | None]:
-            (status_code, status_message, status_ok)
+    Returns :
+        tuple[int, str, bool | None] : status code, status message, and status state
     """
 
     status_code = response.status_code
@@ -41,9 +40,8 @@ def detect_http_version(url: str, httpx_module) -> tuple[str, bool | None, str, 
     """
     Detect the negotiated HTTP protocol version with httpx.
 
-    Returns:
-        tuple[str, bool | None, str, str]:
-            (http_version, http_ok, http_comment, http_risk)
+    Returns :
+        tuple[str, bool | None, str, str] : version, status flag, comment, and risk
     """
     bypassed_tls = False
     try:
@@ -86,9 +84,8 @@ def analyze_url_transition(original_url: str, final_url: str) -> tuple[str, bool
     """
     Analyze the transition between the original URL and the final URL.
 
-    Returns:
-        tuple[str, bool | None, str, str, bool]:
-            (final_url, url_ok, url_comment, url_risk, has_url_credentials)
+    Returns :
+        tuple[str, bool | None, str, str, bool] : final URL, status flag, comment, risk, and credential flag
     """
 
     original_parsed = urlparse(original_url)
@@ -133,9 +130,8 @@ def evaluate_https_posture(
     """
     Evaluate HTTPS posture with a browser-closer approach.
 
-    Returns:
-        tuple[bool, str, str, str]:
-            (uses_https, https_value, https_comment, https_risk)
+    Returns :
+        tuple[bool, str, str, str] : HTTPS flag, displayed value, comment, and risk
     """
     uses_https = str(final_url or "").lower().startswith("https://")
     https_value = "Oui" if uses_https else "Non"
@@ -232,8 +228,8 @@ def adjust_url_risk_with_https_posture(
     """
     Adjust URL risk when requests sees HTTP but HTTPS is available.
 
-    Returns:
-        tuple[str,str] : adjusted risk + adjusted comment
+    Returns :
+        tuple[str, str] : adjusted risk and adjusted comment
     """
     adjusted_risk = url_risk
     adjusted_comment = url_comment or ""
@@ -258,9 +254,8 @@ def evaluate_response_time(seconds: float) -> tuple[bool | None, str, str]:
     """
     Classify response time and associated risk.
 
-    Returns:
-        tuple[bool | None, str, str]:
-            (time_ok, comment, risk)
+    Returns :
+        tuple[bool | None, str, str] : status flag, comment, and risk
     """
 
     if seconds < 0.8:

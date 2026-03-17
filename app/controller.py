@@ -20,7 +20,12 @@ from ui.tables import clear_table, clear_tables
 
 
 class WebAnalyzerApp:
-    """Main controller: connects the UI, scans, and overall summary."""
+    """
+    Main controller that connects the UI, scans, and overall summary.
+
+    Returns :
+        WebAnalyzerApp : application controller instance
+    """
 
     # ===============================================================
     # FUNCTION : __init__
@@ -77,14 +82,24 @@ class WebAnalyzerApp:
     # FUNCTION : run
     # ===============================================================
     def run(self) -> None:
-        """Launch of TK mainloop"""
+        """
+        Launch the Tk main loop.
+
+        Returns :
+            None : no return value
+        """
         self.root.mainloop()
 
     # ===============================================================
     # FUNCTION : launch_scan
     # ===============================================================
     def launch_scan(self) -> None:
-        """Prepare l'UI, normalise l'URL d'entree et demarre le scan hors thread UI."""
+        """
+        Prepare the UI, normalize the input URL, and start the scan off the UI thread.
+
+        Returns :
+            None : no return value
+        """
         clear_tables(self.http_table, self.ssl_table, self.cookies_table)
         clear_table(self.summary_table)
         self.scan_results = {
@@ -116,7 +131,12 @@ class WebAnalyzerApp:
     # FUNCTION : scan_in_background
     # ===============================================================
     def scan_in_background(self, url: str) -> None:
-        """Execute les scans actifs puis met a jour les tables et la synthese."""
+        """
+        Run enabled scans and update the tables and summary.
+
+        Returns :
+            None : no return value
+        """
         try:
             self.set_progress(6)
 
@@ -168,7 +188,12 @@ class WebAnalyzerApp:
     # FUNCTION : build_progress_plan
     # ===============================================================
     def build_progress_plan(self) -> dict:
-        """Repartit la barre selon le cout estime de HTTP, TLS et Cookies."""
+        """
+        Distribute the progress bar using the estimated cost of HTTP, TLS, and Cookies scans.
+
+        Returns :
+            dict : progress milestones
+        """
         enabled_phases = []
         if self.scan_http_var.get():
             enabled_phases.append(("HTTP", 5.0))
@@ -199,7 +224,12 @@ class WebAnalyzerApp:
     # FUNCTION : set_progress
     # ===============================================================
     def set_progress(self, value: float, style: str | None = None, allow_decrease: bool = False) -> None:
-        """Met a jour la barre, avec option explicite pour la reinitialiser."""
+        """
+        Update the progress bar with optional reset support.
+
+        Returns :
+            None : no return value
+        """
         current = float(self.progress_bar["value"])
         next_value = float(value)
         if allow_decrease:
@@ -214,7 +244,12 @@ class WebAnalyzerApp:
     # FUNCTION : open_settings
     # ===============================================================
     def open_settings(self) -> None:
-        """Ouvre une petite fenetre de parametres centree sur la fenetre principale."""
+        """
+        Open a small settings window centered on the main window.
+
+        Returns :
+            None : no return value
+        """
         if self.settings_window is not None and self.settings_window.winfo_exists():
             self.settings_window.deiconify()
             self.settings_window.lift()
@@ -292,7 +327,12 @@ class WebAnalyzerApp:
     # FUNCTION : open_report
     # ===============================================================
     def open_report(self) -> None:
-        """Genere un PDF a partir des reports courants puis l'ouvre."""
+        """
+        Generate a PDF from the current reports and open it.
+
+        Returns :
+            None : no return value
+        """
         has_report = any(((result or {}).get("report") or {}).get("rows") for result in self.scan_results.values())
         if not has_report:
             messagebox.showwarning("PDF", "Aucun resultat de scan a exporter")
@@ -333,7 +373,12 @@ class WebAnalyzerApp:
     # FUNCTION : sync_http_options
     # ===============================================================
     def sync_http_options(self) -> None:
-        """Active 'Forcer HTTPS' uniquement quand le module HTTP est coche."""
+        """
+        Enable the Force HTTPS option only when the HTTP module is selected.
+
+        Returns :
+            None : no return value
+        """
         if self.scan_http_var.get():
             self.force_https_check.config(state="normal")
         else:
@@ -344,14 +389,24 @@ class WebAnalyzerApp:
     # FUNCTION : is_summary_risk
     # ===============================================================
     def is_summary_risk(self, risk: str) -> bool:
-        """Filtre les niveaux qui doivent remonter dans l'onglet global."""
+        """
+        Filter the risk levels that should appear in the global tab.
+
+        Returns :
+            bool : whether the risk must be shown in the global summary
+        """
         return str(risk or "").strip().upper() in {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
 
     # ===============================================================
     # FUNCTION : refresh_summary_table
     # ===============================================================
     def refresh_summary_table(self) -> None:
-        """Consolide les findings des trois modules dans la table globale."""
+        """
+        Consolidate findings from the three modules into the global table.
+
+        Returns :
+            None : no return value
+        """
         clear_table(self.summary_table)
         summary_rows = []
         section_titles = {
@@ -383,7 +438,12 @@ class WebAnalyzerApp:
     # FUNCTION : refresh_summary_view
     # ===============================================================
     def refresh_summary_view(self) -> None:
-        """Met a jour les compteurs de synthese a partir des reports deja calcules."""
+        """
+        Update summary counters from the already computed reports.
+
+        Returns :
+            None : no return value
+        """
         self.refresh_summary_table()
 
         total_rows = 0
@@ -415,7 +475,12 @@ class WebAnalyzerApp:
     # FUNCTION : on_table_select
     # ===============================================================
     def on_table_select(self, event) -> None:
-        """Affiche le detail complet de la ligne selectionnee sous les onglets."""
+        """
+        Display the full details of the selected row below the tabs.
+
+        Returns :
+            None : no return value
+        """
         tree = event.widget
         selected = tree.selection()
         if not selected:

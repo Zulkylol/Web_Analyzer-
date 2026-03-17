@@ -14,9 +14,9 @@ from typing import Any, Mapping
 def _lower_sev(sev: str) -> str:
     """
     Compute the next lower severity level.
-  
-    Returns : 
-        str : lower security level
+
+    Returns :
+        str : lowered severity level
     """
     inv = {v: k for k, v in SEV_ORDER.items()}
     v = SEV_ORDER.get(sev, 0)
@@ -30,8 +30,8 @@ def _get_header(headers: Mapping[str, Any], name: str) -> str | None:
     """
     Return a normalized header value or None if missing/empty.
 
-    Returns:
-        str : normalized header value or None 
+    Returns :
+        str | None : normalized header value
     """
     v = headers.get(name)
     return str(v).strip() if v is not None and str(v).strip() else None
@@ -44,8 +44,8 @@ def _parse_directives(header_value: str) -> dict[str, str]:
     """
     Parse a semicolon-separated header into directive/value pairs.
 
-    Returns:
-        dict[str, str]: Mapping of directives to their values.
+    Returns :
+        dict[str, str] : directive mapping
     """
     # Used for CSP and Permissions-Policy, where semantics rely on directives.
     directives: dict[str, str] = {}
@@ -67,11 +67,11 @@ def scan_security_headers(
     headers: Mapping[str, Any],
     required_headers: dict[str, str],  # header -> expected severity if missing
     ) -> list[dict[str, str | None]]:
-    """ 
+    """
     Analyze HTTP security headers and report missing, weak, or invalid configurations.
 
-    Returns:
-        list[dict]: Detailed findings (header, status, severity, issue, recommendation, value)
+    Returns :
+        list[dict[str, str | None]] : detailed header findings
     """
     # Chaque finding est deja pense pour pouvoir etre remonte tel quel dans le report HTTP.
     findings: list[dict[str, Any]] = []
@@ -80,11 +80,11 @@ def scan_security_headers(
     # FUNCTION : expected
     # ===============================================================
     def expected(header: str) -> str:
-        """ 
-        Return expected severity for a missing header
+        """
+        Return the expected severity for a missing header.
 
-        Returns : 
-            str : expected headers
+        Returns :
+            str : expected severity
         """
         return required_headers.get(header, "info")
 
@@ -92,8 +92,11 @@ def scan_security_headers(
     # FUNCTION : add
     # ===============================================================
     def add(header: str, status: str, severity: str, issue: str, rec: str, value: str | None):
-        """ 
-        Append a structured finding entry 
+        """
+        Append a structured finding entry.
+
+        Returns :
+            None : no return value
         """
         findings.append({
             "header": header,

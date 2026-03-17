@@ -11,6 +11,9 @@ import ttkbootstrap as ttk
 def clear_table(table):
     """
     Clear all rows from a single result table.
+
+    Returns :
+        None : no return value
     """
     table.delete(*table.get_children())
 
@@ -20,6 +23,9 @@ def clear_table(table):
 def clear_tables(http_table,ssl_table,cookies_table):
     """
     Clear all rows from the HTTP, TLS, and Cookies tables.
+
+    Returns :
+        None : no return value
     """
     clear_table(http_table)
     clear_table(ssl_table)
@@ -31,6 +37,9 @@ def clear_tables(http_table,ssl_table,cookies_table):
 def create_result_table(parent, title):
     """
     Create and return the standard result table used by every tab.
+
+    Returns :
+        ttk.Treeview : configured result table
     """
     frame = ttk.LabelFrame(parent, text=title, font=("Helvetica", 11, "bold"))
     frame.pack(side="left", padx=5, pady=5, fill="both", expand=True)

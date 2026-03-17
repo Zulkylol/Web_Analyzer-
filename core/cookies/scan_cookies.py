@@ -30,7 +30,12 @@ from utils.url import normalize_url
 # FUNCTION : scan_cookies_config
 # ===============================================================
 def scan_cookies_config(url: str) -> dict:
-    """Pipeline cookies: requete, parsing Set-Cookie, evaluations, resume, puis report."""
+    """
+    Run the cookie pipeline from request to report generation.
+
+    Returns :
+        dict : populated cookie result
+    """
     result = init_cookies_result()
     normalized = normalize_url(url)
 

@@ -2,7 +2,12 @@
 # FUNCTION : init_cookies_result
 # ===============================================================
 def init_cookies_result() -> dict:
-    """Initialise la structure commune utilisee par le scan cookies."""
+    """
+    Initialize the shared result structure used by the cookie scan.
+
+    Returns :
+        dict : default cookie result structure
+    """
     return {
         "final_url": "",
         "tls_bypassed": False,
