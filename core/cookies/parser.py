@@ -1,4 +1,9 @@
-﻿from __future__ import annotations
+﻿# core/cookies/parser.py
+
+# ===============================================================
+# IMPORTS
+# ===============================================================
+from __future__ import annotations
 
 from http.cookies import SimpleCookie
 from urllib.parse import urlparse
